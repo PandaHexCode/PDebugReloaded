@@ -36,7 +36,7 @@ Enable DrawCollisions.
 ![DrawCollisionAndWireframeShowcase](Captures/DrawCollisionAndWireframeShowcase.PNG)
 
 # Change Physics Settings
-For having fun you can change the Physics settings ingame like gravity etc (You can open the menu from the Other Tab)
+For having fun you can change the Physics settings ingame like gravity etc (You can open the menu from the Other Tab).
 
 ## And much more
 
