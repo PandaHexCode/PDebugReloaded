@@ -14,6 +14,8 @@ Of course there is also an ingame console where the user can see all logs/warnin
 You can edit GameObjects ingame like deactivate/activate it, destroy it , copy it , change the position, rotation & scale, deactivate/activate individual components,
 and more...
 
+![DisableShowcaseGif](DisableShowcase.gif)
+
 ## Invoke Methods
 You can invoke a Methode for any Component you want and edit the Parameters of it (Currently not supported all Parameters)!
 
