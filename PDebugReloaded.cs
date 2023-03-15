@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
@@ -40,6 +40,8 @@ namespace PandaHexCode.PDebug{
         private UnityEngine.Component targetComponent = null;
         private MethodInfo targetMethod;
         private PropertyInfo targetPropertyInfo;
+        private FieldInfo targetFieldInfo;
+        private bool isTargetField = false;
 
         private List<LogEntry> logs = new List<LogEntry>();/*For the console window*/
 
@@ -457,6 +459,35 @@ namespace PandaHexCode.PDebug{
 
             this.scrollPosition[4] = GUILayout.BeginScrollView(this.scrollPosition[4]);
 
+
+            foreach(FieldInfo field in this.targetComponent.GetType().GetFields(BindingFlags.Static | BindingFlags.Default | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly | BindingFlags.ExactBinding | BindingFlags.GetField | BindingFlags.SetProperty | BindingFlags.GetProperty | BindingFlags.SetField | BindingFlags.SetProperty)){
+                try{
+                    if (field.Name.Equals("rigidbody") | field.Name.Equals("rigidbody2D") | field.Name.Equals("camera"))
+                        continue;
+
+                    var value = field.GetValue(this.targetComponent);
+
+                    GUILayout.BeginHorizontal();
+
+                    GUILayout.Label(field.Name + " - " + value);
+
+                    if (GUILayout.Button("Edit")){
+                        this.targetFieldInfo = field;
+                        this.editValueInput = value.ToString().Replace("(", "").Replace(")", "");
+                        this.objectComponentValuesWindowEnable = 2;
+                        this.isTargetField = true;
+                    }
+
+                    GUILayout.EndHorizontal();
+                }catch (Exception e){
+                    if (this.logExceptions)
+                        Debug.Log(e.Message + "|" + e.StackTrace);
+                    continue;
+                } 
+            }
+
+            GUILayout.Label("Properties");
+            
             foreach(PropertyInfo prop in this.targetComponent.GetType().GetProperties()){
                 try{
                     if (prop.Name.Equals("rigidbody") | prop.Name.Equals("rigidbody2D") | prop.Name.Equals("camera"))
@@ -472,6 +503,7 @@ namespace PandaHexCode.PDebug{
                         this.targetPropertyInfo = prop;
                         this.editValueInput = value.ToString().Replace("(", "").Replace(")", "");
                         this.objectComponentValuesWindowEnable = 2;
+                        this.isTargetField = false;
                     }
 
                     GUILayout.EndHorizontal();
@@ -490,7 +522,7 @@ namespace PandaHexCode.PDebug{
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
-            if (this.targetComponent == null | this.targetPropertyInfo == null)
+            if (this.targetComponent == null | (this.targetPropertyInfo == null && this.targetFieldInfo == null))
                 return;
 
             GUILayout.BeginVertical();
@@ -500,16 +532,25 @@ namespace PandaHexCode.PDebug{
             if (GUILayout.Button("Back"))
                 this.objectComponentValuesWindowEnable = 1;
 
-            if (GUILayout.Button("CopyVar"))
-                this.copiedVar = this.targetPropertyInfo.GetValue(this.targetComponent, null);
+            if (GUILayout.Button("CopyVar")){
+                if(this.isTargetField)
+                    this.copiedVar = this.targetFieldInfo.GetValue(this.targetComponent);
+                else
+                    this.copiedVar = this.targetPropertyInfo.GetValue(this.targetComponent, null);
+            }
 
             if (this.copiedVar != null && GUILayout.Button("PasteVar")){
-                if(this.copiedVar.GetType() != this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType()){
+                if((!this.isTargetField && this.copiedVar.GetType() != this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType())
+                    | (this.isTargetField && this.copiedVar.GetType() != this.targetFieldInfo.GetValue(this.targetComponent).GetType())){
                     this.objectComponentValuesWindowEnable = 4;
                     return;
                 }
 
-                this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar, null);
+                if (this.isTargetField)
+                    this.targetFieldInfo.SetValue(this.targetComponent, this.copiedVar);
+                else
+                    this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar, null);
+
                 this.objectComponentValuesWindowEnable = 3;
             }
 
@@ -519,13 +560,25 @@ namespace PandaHexCode.PDebug{
 
             if(GUILayout.Button("Try to cast")){
                 try{
-                    object var = TryToCastString(this.editValueInput, this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType());
-                    if (var == null){
-                        this.objectComponentValuesWindowEnable = 4;
-                        return;
-                    }else
-                        this.objectComponentValuesWindowEnable = 3;
-                    this.targetPropertyInfo.SetValue(this.targetComponent, var, null);
+
+                    if (!this.isTargetField){
+                        object var = TryToCastString(this.editValueInput, this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType());
+                        if (var == null){
+                            this.objectComponentValuesWindowEnable = 4;
+                            return;
+                        }else
+                            this.objectComponentValuesWindowEnable = 3;
+                        this.targetPropertyInfo.SetValue(this.targetComponent, var, null);
+                    }else{
+                        object var = TryToCastString(this.editValueInput, this.targetFieldInfo.GetValue(this.targetComponent).GetType());
+                        if (var == null){
+                            this.objectComponentValuesWindowEnable = 4;
+                            return;
+                        }else
+                            this.objectComponentValuesWindowEnable = 3;
+                        this.targetFieldInfo.SetValue(this.targetComponent, var);
+                    }
+                
                 }catch (Exception e){
                     this.objectComponentValuesWindowEnable = 4;
                 }
