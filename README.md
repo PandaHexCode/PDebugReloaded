@@ -43,4 +43,4 @@ It's need much more imrpoves and maybe new Functions...
 ## Easy to implement
 The script was only written with GUI, which means that it does not need any external variables that have to be specified in the editor, it simply has to be added to an object!
 
-With the program dnSpy (https://github.com/dnSpy/dnSpy) you can add the script to a compiled Unity game, but you have to add the script to a GameObject somewhere, which should be easy ("```Camera.main.gameObject.AddComponent<PandaHexCode.PDebug.PDebugReloaded>();```"!
+With the program dnSpy (https://github.com/dnSpy/dnSpy) you can add the script to a compiled Unity game, but you have to add the script to a GameObject somewhere, which should be easy ("```Camera.main.gameObject.AddComponent<PandaHexCode.PDebug.PDebugReloaded>();```", just write it somewhere in like "MainMenu.cs", "TitleScreen.cs", "SplashScreenController.cs" Awake or Start function!
