@@ -29,8 +29,8 @@ In the "Time" tab you can view the deltaTime and timeScale, and you can also cha
 In the "Scene" tab you will see a list of all the scenes and next to it a "Load" button with which you can load the selected scene!
 
 ## Render
-In the "Other" Tab you can enable the FreeCam.
-Enable wireframe.
+In the "Other" Tab you can enable the FreeCam.<br />
+Enable wireframe.<br />
 Enable DrawCollisions.
 
 ![DrawCollisionAndWireframeShowcase](Captures/DrawCollisionAndWireframeShowcase.PNG)
