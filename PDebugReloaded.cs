@@ -43,6 +43,8 @@ namespace PandaHexCode.PDebug{
         private FieldInfo targetFieldInfo;
         private bool isTargetField = false;
 
+        private int targetCopiedIndex = 0;
+
         private List<LogEntry> logs = new List<LogEntry>();/*For the console window*/
 
         private bool showMenu = true;
@@ -80,17 +82,31 @@ namespace PandaHexCode.PDebug{
                 Cursor.lockState = CursorLockMode.Locked;
             }
 
-            if (Input.GetKeyDown(KeyCode.C) && Input.GetKey(KeyCode.Tab))
-                this.viewCursor = !this.viewCursor;
+            if (Input.GetKey(KeyCode.Tab)){
+                if (Input.GetKeyDown(KeyCode.C))
+                    this.viewCursor = !this.viewCursor;
 
-            if (Input.GetKeyDown(KeyCode.M) && Input.GetKey(KeyCode.Tab))
-                this.showMenu = !this.showMenu;
+                if (Input.GetKeyDown(KeyCode.M))
+                    this.showMenu = !this.showMenu;
 
-            if (Input.GetKeyDown(KeyCode.P) && Input.GetKey(KeyCode.Tab)){
-                if (Time.timeScale == 0)
-                    Time.timeScale = 1;
-                else
-                    Time.timeScale = 0;
+                if (Input.GetKeyDown(KeyCode.P)){
+                    if (Time.timeScale == 0)
+                        Time.timeScale = 1;
+                    else
+                        Time.timeScale = 0;
+                }
+
+
+                if (Input.GetKeyDown("1"))
+                    this.targetCopiedIndex = 0;
+                else if (Input.GetKeyDown("2"))
+                    this.targetCopiedIndex = 1;
+                else if (Input.GetKeyDown("3"))
+                    this.targetCopiedIndex = 2;
+                else if (Input.GetKeyDown("4"))
+                    this.targetCopiedIndex = 3;
+                else if (Input.GetKeyDown("5"))
+                    this.targetCopiedIndex = 4;
             }
 
             if (this.currentState == State.Objects) {
@@ -274,7 +290,7 @@ namespace PandaHexCode.PDebug{
             }
         }
 
-        private GameObject copiedGameObject = null;
+        private GameObject[] copiedGameObject = new GameObject[5];
         private void ObjectsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -295,10 +311,10 @@ namespace PandaHexCode.PDebug{
                 Destroy(this.targetObject);
 
             if (GUI.Button(new Rect(10f, 75f, 40f, 20f), "Copy"))
-                this.copiedGameObject = this.targetObject;
+                this.copiedGameObject[this.targetCopiedIndex] = this.targetObject;
 
-            if (this.copiedGameObject != null && GUI.Button(new Rect(55f, 75f, 25f, 20f), "P")){
-                GameObject obj = Instantiate(this.copiedGameObject);
+            if (this.copiedGameObject[this.targetCopiedIndex] != null && GUI.Button(new Rect(55f, 75f, 25f, 20f), "P")){
+                GameObject obj = Instantiate(this.copiedGameObject[this.targetCopiedIndex]);
                 obj.transform.position = this.targetObject.transform.position;
             }
 
@@ -386,7 +402,7 @@ namespace PandaHexCode.PDebug{
         }
 
         private bool objectComponentsWindowEnable = false;
-        private Component copiedComponent = null;
+        private Component[] copiedComponent = new Component[5];
         private void ObjectComponentsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -398,8 +414,8 @@ namespace PandaHexCode.PDebug{
 
             this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
 
-            if (this.copiedComponent != null && GUILayout.Button("Paste"))
-                this.targetObject.AddComponent(this.copiedComponent.GetType());
+            if (this.copiedComponent[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
+                this.targetObject.AddComponent(this.copiedComponent[this.targetCopiedIndex].GetType());
 
             foreach (Component comp in this.targetObject.GetComponents(typeof(UnityEngine.Component))){
                 string compName = comp.ToString();
@@ -439,7 +455,7 @@ namespace PandaHexCode.PDebug{
                 }
 
                 if (GUILayout.Button("Copy"))
-                    this.copiedComponent = comp;
+                    this.copiedComponent[this.targetCopiedIndex] = comp;
 
                 GUILayout.EndHorizontal();
             }
@@ -518,7 +534,7 @@ namespace PandaHexCode.PDebug{
         }
 
         private string editValueInput = string.Empty;
-        private object copiedVar = null;
+        private object[] copiedVar = new object[5];
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -534,22 +550,22 @@ namespace PandaHexCode.PDebug{
 
             if (GUILayout.Button("CopyVar")){
                 if(this.isTargetField)
-                    this.copiedVar = this.targetFieldInfo.GetValue(this.targetComponent);
+                    this.copiedVar[this.targetCopiedIndex] = this.targetFieldInfo.GetValue(this.targetComponent);
                 else
-                    this.copiedVar = this.targetPropertyInfo.GetValue(this.targetComponent, null);
+                    this.copiedVar[this.targetCopiedIndex] = this.targetPropertyInfo.GetValue(this.targetComponent, null);
             }
 
-            if (this.copiedVar != null && GUILayout.Button("PasteVar")){
-                if((!this.isTargetField && this.copiedVar.GetType() != this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType())
-                    | (this.isTargetField && this.copiedVar.GetType() != this.targetFieldInfo.GetValue(this.targetComponent).GetType())){
+            if (this.copiedVar[this.targetCopiedIndex] != null && GUILayout.Button("PasteVar")){
+                if((!this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType())
+                    | (this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetFieldInfo.GetValue(this.targetComponent).GetType())){
                     this.objectComponentValuesWindowEnable = 4;
                     return;
                 }
 
                 if (this.isTargetField)
-                    this.targetFieldInfo.SetValue(this.targetComponent, this.copiedVar);
+                    this.targetFieldInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex]);
                 else
-                    this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar, null);
+                    this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex], null);
 
                 this.objectComponentValuesWindowEnable = 3;
             }
@@ -909,7 +925,7 @@ namespace PandaHexCode.PDebug{
 
             GUI.Label(new Rect(10f, 50f, 500f, 500f), "ProductName: "+ Application.productName + "\nCompanyName: " 
                 + Application.companyName +"\nUnityVersion: " + Application.unityVersion
-                + "\nTAB + , C switch cursor visibility\n,M switch menu visibility, P toggle pause" 
+                + "\nTAB + , C switch cursor visibility\n,M switch menu visibility, P toggle pause, 1-5 switch copyIndex" 
                 + "\n" + this.NAME + " by PandaHexCode");
 
             if (GUI.Button(new Rect(215f, 30f, 100f, 15f), "Is3D: " + this.is3D))
