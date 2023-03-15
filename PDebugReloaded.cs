@@ -217,9 +217,9 @@ namespace PandaHexCode.PDebug{
 
                     if (this.otherRenderWindowEnable){
                         if (this.otherPhysicsWindowEnable)
-                            GUI.Window(5, new Rect(515, 205, 380, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
+                            GUI.Window(5, new Rect(515, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
                         else
-                            GUI.Window(5, new Rect(10, 205, 380, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
+                            GUI.Window(5, new Rect(10, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
                     }
                     break;
 
@@ -1046,6 +1046,7 @@ namespace PandaHexCode.PDebug{
         }
 
         private bool otherRenderWindowEnable = false;
+        public bool[] drawCollToggles = new bool[4] { true, true, true, true};
         private void RenderWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -1062,6 +1063,11 @@ namespace PandaHexCode.PDebug{
                 CheckTargetCameraMod();
                 this.targetCamera.GetComponent<RenderCameraMod>().drawCollision = !this.targetCamera.GetComponent<RenderCameraMod>().drawCollision;
             }
+
+            this.drawCollToggles[0] = GUI.Toggle(new Rect(190, 70, 50, 20), this.drawCollToggles[0], "Mesh");
+            this.drawCollToggles[1] = GUI.Toggle(new Rect(240, 70, 55, 20), this.drawCollToggles[1], "Other");
+            this.drawCollToggles[2] = GUI.Toggle(new Rect(300, 70, 60, 20), this.drawCollToggles[2], "Trigger");
+            this.drawCollToggles[3] = GUI.Toggle(new Rect(360, 70, 60, 20), this.drawCollToggles[3], "!Trigger");
 
             if (GUI.Button(new Rect(10f, 100f, 105f, 20f), "Flag: " + this.targetCamera.clearFlags)){
                 switch (this.targetCamera.GetComponent<Camera>().clearFlags){
@@ -1208,7 +1214,22 @@ namespace PandaHexCode.PDebug{
 
             GL.Begin(GL.LINES);
             GL.Color(Color.red);
+
+            bool extraCheck = !PDebugReloaded.instance.drawCollToggles[0] | !PDebugReloaded.instance.drawCollToggles[1] | !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
+
             foreach (Collider collider in FindObjectsOfType<Collider>()){
+                if (extraCheck){
+                    if (!PDebugReloaded.instance.drawCollToggles[0] && collider is MeshCollider)
+                        continue;
+                    else if (!PDebugReloaded.instance.drawCollToggles[1] &&
+                        (!(collider is BoxCollider) && !(collider is SphereCollider) && !(collider is MeshCollider) && !(collider is CapsuleCollider)))
+                        continue;
+                    else if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
+                        continue;
+                    else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
+                        continue;
+                }
+
                 Bounds bounds = collider.bounds;
                 Vector3 min = bounds.min;
                 Vector3 max = bounds.max;
