@@ -1,6 +1,6 @@
 
 # PDebugReloaded Unity Game Cheat/Hack Script
-PDebug is a script for Unity (written in C#) that allows users to debug the game it's also nice for cheating in other games.
+PDebug is a script for Unity (written in C#) that allows users to debug the game, it's also nice for cheating in other games.
 
 ![Screenshot](Capture.PNG)
 
