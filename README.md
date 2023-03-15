@@ -31,16 +31,15 @@ In the "Scene" tab you will see a list of all the scenes and next to it a "Load"
 ## FreeCam
 In the "Other" Tab you can activate and disable the FreeCam.
 
-## And much more
+![DrawCollisionAndWireframeShowcase](Captures/DrawCollisionAndWireframeShowcase.PNG)
 
 # Change Physics Settings
 For having fun you can change the Physics settings ingame like gravity etc (You can open the menu from the Other Tab)
 
+## And much more
+
 ## Is3D Boolean
 Don't forget to set the is3D bool correctly in the script or ingame in the Application Tab!
-
-## Still not finished!
-It's need much more imrpoves and maybe new Functions...
 
 ## Easy to implement
 The script was only written with GUI, which means that it does not need any external variables that have to be specified in the editor, it simply has to be added to an object!
