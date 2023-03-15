@@ -2,7 +2,7 @@
 # PDebugReloaded Unity Game Cheat/Hack Script
 PDebug is a script for Unity (written in C#) that allows users to debug the game, it's also nice for cheating in other games.
 
-![Screenshot](Capture.PNG)
+![Screenshot](Captures/Capture.PNG)
 
 ## Why PDebug"Reloaded"?
 PDebugReloaded is a completely revised version of my old project "PDebug", I improved the code, beautified, added new functions etc.
@@ -14,7 +14,7 @@ Of course there is also an ingame console where the user can see all logs/warnin
 You can edit GameObjects ingame like deactivate/activate it, destroy it , copy it , change the position, rotation & scale, deactivate/activate individual components,
 and more...
 
-![DisableShowcaseGif](DisableShowcase2.gif)
+![DisableShowcaseGif](Captures/DisableShowcase2.gif)
 
 ## Invoke Methods
 You can invoke a Methode for any Component you want and edit the Parameters of it (Currently not supported all Parameters)!
