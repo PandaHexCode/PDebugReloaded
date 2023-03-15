@@ -38,6 +38,8 @@ Enable DrawCollisions.
 # Change Physics Settings
 For having fun you can change the Physics settings ingame like gravity etc (You can open the menu from the Other Tab).
 
+![OtherTab](Captures/OtherTab.PNG)
+
 ## And much more
 
 ## Is3D Boolean
