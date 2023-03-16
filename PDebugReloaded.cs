@@ -432,7 +432,7 @@ namespace PandaHexCode.PDebug{
         }
 
         private bool objectComponentsWindowEnable = false;
-        private Component[] copiedComponent = new Component[5];
+        private Type[] copiedComponent = new Type[5];
         private void ObjectComponentsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -445,7 +445,7 @@ namespace PandaHexCode.PDebug{
             this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
 
             if (this.copiedComponent[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
-                this.targetObject.AddComponent(this.copiedComponent[this.targetCopiedIndex].GetType());
+                this.targetObject.AddComponent(this.copiedComponent[this.targetCopiedIndex]);
 
             foreach (Component comp in this.targetObject.GetComponents(typeof(UnityEngine.Component))){
                 string compName = comp.ToString();
@@ -488,8 +488,11 @@ namespace PandaHexCode.PDebug{
                     if (this.onlyUseVarCopy)
                         this.copiedVar[this.targetCopiedIndex] = comp;
                     else
-                        this.copiedComponent[this.targetCopiedIndex] = comp;
+                        this.copiedComponent[this.targetCopiedIndex] = comp.GetType();
                 }
+
+                if (GUILayout.Button("Destroy"))
+                    Destroy(comp);
 
                 GUILayout.EndHorizontal();
             }
@@ -600,6 +603,15 @@ namespace PandaHexCode.PDebug{
                     this.targetFieldInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex]);
                 else
                     this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex], null);
+
+                this.objectComponentValuesWindowEnable = 3;
+            }
+
+            if (GUILayout.Button("SetNull")){
+                if (this.isTargetField)
+                    this.targetFieldInfo.SetValue(this.targetComponent, null);
+                else
+                    this.targetPropertyInfo.SetValue(this.targetComponent, null, null);
 
                 this.objectComponentValuesWindowEnable = 3;
             }
@@ -1008,7 +1020,12 @@ namespace PandaHexCode.PDebug{
             for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings; i++){
                 GUILayout.BeginHorizontal();
 
-                GUILayout.Label(i.ToString());
+                string sceneName = string.Empty;
+                try{//If it gives an error here, simple delete "sceneName = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(i).name;"
+                    sceneName = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(i).name;
+                }catch (Exception e){}
+
+                GUILayout.Label(i.ToString() + " " + sceneName);
                 if (GUILayout.Button("Load"))
                     UnityEngine.SceneManagement.SceneManager.LoadScene(i);
 
