@@ -30,7 +30,12 @@ namespace PandaHexCode.PDebug{
         public static PDebugReloaded instance = null;
 
         private string NAME = "PDebugReloaded";
+
+        private bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
+        
         public Color backgroundColor = new Color(0f, 0f, 0f, 0.5f);
+        private bool logExceptions = false;/*True needs lot more Performance!*/
+        private KeyCode shortcutMainKey = KeyCode.F1;
 
         private enum State { Console = 0, Objects = 1, Time = 2, Scene = 3, Application = 4, Other = 5, Custom = 6};
         private State currentState = State.Console;
@@ -48,8 +53,6 @@ namespace PandaHexCode.PDebug{
         private List<LogEntry> logs = new List<LogEntry>();/*For the console window*/
 
         private bool showMenu = true;
-        private bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
-        private bool logExceptions = false;/*True needs lot more Performance!*/
         private bool viewCursor = true;
 
         private Vector2[] scrollPosition = new Vector2[8];/*For the OnGUI windows*/
@@ -82,7 +85,7 @@ namespace PandaHexCode.PDebug{
                 Cursor.lockState = CursorLockMode.Locked;
             }
 
-            if (Input.GetKey(KeyCode.Tab)){
+            if (Input.GetKey(this.shortcutMainKey)){
                 if (Input.GetKeyDown(KeyCode.C))
                     this.viewCursor = !this.viewCursor;
 
@@ -95,7 +98,6 @@ namespace PandaHexCode.PDebug{
                     else
                         Time.timeScale = 0;
                 }
-
 
                 if (Input.GetKeyDown("1"))
                     this.targetCopiedIndex = 0;
@@ -163,11 +165,18 @@ namespace PandaHexCode.PDebug{
                         int xPos = 10;
                         if (this.objectComponentsWindowEnable)
                             xPos = 395;
-                      
-                        if(this.objectComponentValuesWindowEnable == 1)
+
+                        if (this.objectComponentValuesWindowEnable == 1)
                             GUI.Window(5, new Rect(xPos, 205, 380, 140), ObjectComponentValuesWindow, "Values");
-                        else
-                            GUI.Window(5, new Rect(xPos, 205, 380, 140), EditValueWindow, "EditValue - " + this.targetPropertyInfo.Name);
+                        else{
+                            string valueName = string.Empty;
+                            if (this.isTargetField)
+                                valueName = this.targetFieldInfo.Name;
+                            else
+                                valueName = this.targetPropertyInfo.Name;
+
+                            GUI.Window(5, new Rect(xPos, 205, 380, 140), EditValueWindow, "EditValue - " + valueName);
+                        }
                     }else if(this.objectComponentMethodesWindowEnable != 0){
                         int xPos = 10;
                         if (this.objectComponentsWindowEnable)
@@ -207,6 +216,13 @@ namespace PandaHexCode.PDebug{
                             GUI.Window(3, new Rect(645, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
                         else
                             GUI.Window(4, new Rect(895, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                    }
+
+                    if (this.viewEnumValuesWindowEnable){
+                        if(this.objectComponentsWindowEnable | this.objectComponentValuesWindowEnable != 0 | this.objectComponentMethodesWindowEnable != 0)
+                            GUI.Window(7, new Rect(10, 370, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
+                        else
+                            GUI.Window(7, new Rect(10, 205, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
                     }
                     break;
 
@@ -259,6 +275,12 @@ namespace PandaHexCode.PDebug{
                 this.currentState = State.Application;
             if (GUI.Button(new Rect(395f, 10f, 70f, 20f), "Other"))
                 this.currentState = State.Other;
+            if (GUI.Button(new Rect(470f, 10f, 100f, 20f), "CopyIndex: " + (this.targetCopiedIndex + 1))){
+                if (this.targetCopiedIndex < 4)
+                    this.targetCopiedIndex++;
+                else
+                    this.targetCopiedIndex = 0;
+            }
         }
 
         private void ConsoleWindow(int windowID) {
@@ -620,54 +642,81 @@ namespace PandaHexCode.PDebug{
 
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
-            foreach(MethodInfo method in this.targetComponent.GetType().GetMethods()){
-                GUILayout.BeginHorizontal();
-                
-                string endString = method.Name + "(";
-                foreach (ParameterInfo parm in method.GetParameters()){
-                    string type = parm.GetType().Name;
-                    endString = endString + " " + parm.Name + ",";
+            foreach(MethodInfo method in this.targetComponent.GetType().GetMethods(
+                BindingFlags.Static | BindingFlags.Default | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly | BindingFlags.ExactBinding | BindingFlags.GetField | BindingFlags.SetProperty | BindingFlags.GetProperty | BindingFlags.SetField | BindingFlags.SetProperty)){
+                try {
+                    MethodDraw(method);
+                }catch(Exception e){
+                    if (this.logExceptions)
+                        Debug.Log(e.Message + "|" + e.StackTrace);
+                    continue;
                 }
-                if (method.GetParameters().Length > 0)
-                    endString = endString.Remove(endString.Length - 1);
-                endString = endString + " )";
+            }
 
-                GUILayout.Label(endString);
-                if (GUILayout.Button("Invoke")){
-                    if (method.GetParameters().Length == 0)
-                        method.Invoke(this.targetComponent, null);
-                    else{
-                        this.objectComponentMethodesWindowEnable = 2;
-                        this.targetMethod = method;
+            GUILayout.Label("Other");
 
-                        string parms = string.Empty;
-                        foreach (ParameterInfo parm in this.targetMethod.GetParameters()){
-                            if (parms != string.Empty)
-                                parms = parms + "#";
-
-                            parms = parms + parm.ParameterType;
-                        }
-
-                        this.editValueInput = parms;
-                    }
+            foreach (MethodInfo method in this.targetComponent.GetType().GetMethods()){
+                try{
+                    MethodDraw(method);
+                }catch (Exception e){
+                    if (this.logExceptions)
+                        Debug.Log(e.Message + "|" + e.StackTrace);
+                    continue;
                 }
-
-                GUILayout.EndHorizontal();
             }
 
             GUILayout.EndScrollView();
         }
 
+        private void MethodDraw(MethodInfo method){
+            GUILayout.BeginHorizontal();
+
+            string endString = method.Name + "(";
+            foreach (ParameterInfo parm in method.GetParameters()){
+                string type = parm.GetType().Name;
+                endString = endString + " " + parm.Name + ",";
+            }
+            if (method.GetParameters().Length > 0)
+                endString = endString.Remove(endString.Length - 1);
+            endString = endString + " )";
+
+            GUILayout.Label(endString);
+            if (GUILayout.Button("Invoke")){
+                if (method.GetParameters().Length == 0)
+                    method.Invoke(this.targetComponent, null);
+                else{
+                    this.objectComponentMethodesWindowEnable = 2;
+                    this.targetMethod = method;
+
+                    string parms = string.Empty;
+                    foreach (ParameterInfo parm in this.targetMethod.GetParameters()){
+                        if (parms != string.Empty)
+                            parms = parms + "#";
+
+                        parms = parms + parm.ParameterType;
+                    }
+
+                    this.editValueInput = parms;
+                }
+            }
+
+            GUILayout.EndHorizontal();
+        }
+
         private void EditMethodInvokeWindow(int windowID){
-             GUI.backgroundColor = this.backgroundColor;
+            GUI.backgroundColor = this.backgroundColor;
 
             if (this.targetComponent == null | this.targetMethod == null)
                 return;
+
+            this.scrollPosition[6] = GUILayout.BeginScrollView(this.scrollPosition[6]);
 
             GUILayout.BeginVertical();
 
             if (GUILayout.Button("Back"))
                 this.objectComponentMethodesWindowEnable = 1;
+
+            GUILayout.Label("Write \"!(CopyIndexNumber)\" for paste the current copied value.\"v\" for view an enum.");
 
             string parms = string.Empty;
             foreach (ParameterInfo parm in this.targetMethod.GetParameters()){
@@ -709,10 +758,16 @@ namespace PandaHexCode.PDebug{
                 GUILayout.Label("Last cast was not successfuly!");
 
             GUILayout.EndVertical();
+            GUILayout.EndScrollView();
         }
 
         public object TryToCastString(string valStr, Type type){
             object var = null;
+
+            if(!type.Equals(typeof(string)) && valStr.StartsWith("!")){
+                var = this.copiedVar[(int)StringToFloat(valStr.Replace("!", "")) - 1];
+                return var;
+            }
 
             if (type.Equals(typeof(int)))
                 var = (int)StringToFloat(valStr);
@@ -754,9 +809,43 @@ namespace PandaHexCode.PDebug{
                 valStr = valStr.Replace("#", "");
                 ColorUtility.TryParseHtmlString("#" + valStr, out color);
                 var = (Color32)color;
+            }else if (type.IsEnum){
+                if (valStr.Equals("v")){
+                    this.viewEnumValuesWindowEnable = true;
+                    this.targetEnum = type;
+                    return null;
+                }
+
+                var = Enum.ToObject(type, (int)StringToFloat(valStr));
             }
 
             return var;
+        }
+
+
+        private bool viewEnumValuesWindowEnable = false;
+        private object targetEnum;
+        private void ViewEnumValuesWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.viewEnumValuesWindowEnable = false;
+
+            if (this.targetEnum == null)
+                return;
+
+            for (int i = 0; i < Enum.GetValues((Type)this.targetEnum).Length; i++){
+                GUILayout.BeginHorizontal();
+
+                GUILayout.Label(Enum.GetName((Type)this.targetEnum, Enum.GetValues((Type)this.targetEnum).GetValue(i)) + " \\ " +
+                    (int)Enum.GetValues((Type)this.targetEnum).GetValue(i));
+
+                GUILayout.EndHorizontal();
+            }
+
+            this.scrollPosition[7] = GUILayout.BeginScrollView(this.scrollPosition[7]);
+
+            GUILayout.EndScrollView();
         }
 
         private bool objectChildWindowEnable = false;
@@ -925,7 +1014,7 @@ namespace PandaHexCode.PDebug{
 
             GUI.Label(new Rect(10f, 50f, 500f, 500f), "ProductName: "+ Application.productName + "\nCompanyName: " 
                 + Application.companyName +"\nUnityVersion: " + Application.unityVersion
-                + "\nTAB + , C switch cursor visibility\n,M switch menu visibility, P toggle pause, 1-5 switch copyIndex" 
+                + "\n" + this.shortcutMainKey.ToString().Replace("KeyCode.", "") + " + , C switch cursor visibility\n,M switch menu visibility, P toggle pause, 1-5 switch copyIndex" 
                 + "\n" + this.NAME + " by PandaHexCode");
 
             if (GUI.Button(new Rect(215f, 30f, 100f, 15f), "Is3D: " + this.is3D))
