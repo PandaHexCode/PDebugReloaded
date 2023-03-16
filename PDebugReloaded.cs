@@ -49,13 +49,14 @@ namespace PandaHexCode.PDebug{
         private bool isTargetField = false;
 
         private int targetCopiedIndex = 0;
+        private bool onlyUseVarCopy = false /*If true, it always use CopiedVar for copy button*/;
 
         private List<LogEntry> logs = new List<LogEntry>();/*For the console window*/
 
         private bool showMenu = true;
         private bool viewCursor = true;
 
-        private Vector2[] scrollPosition = new Vector2[8];/*For the OnGUI windows*/
+        private Vector2[] scrollPosition = new Vector2[10];/*For the OnGUI windows*/
 
         private void Awake(){
             this.targetCamera = Camera.main;
@@ -220,7 +221,7 @@ namespace PandaHexCode.PDebug{
 
                     if (this.viewEnumValuesWindowEnable){
                         if(this.objectComponentsWindowEnable | this.objectComponentValuesWindowEnable != 0 | this.objectComponentMethodesWindowEnable != 0)
-                            GUI.Window(7, new Rect(10, 370, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
+                            GUI.Window(7, new Rect(10, 350, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
                         else
                             GUI.Window(7, new Rect(10, 205, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
                     }
@@ -281,6 +282,9 @@ namespace PandaHexCode.PDebug{
                 else
                     this.targetCopiedIndex = 0;
             }
+
+            if (GUI.Button(new Rect(575f, 10f, 120f, 20f), this.onlyUseVarCopy ? "OnlyVarCopy: On" : "OnlyVarCopy: Off"))
+                this.onlyUseVarCopy = !this.onlyUseVarCopy;
         }
 
         private void ConsoleWindow(int windowID) {
@@ -332,8 +336,12 @@ namespace PandaHexCode.PDebug{
             if (GUI.Button(new Rect(10f, 100f, 70f, 20f), "Destroy"))
                 Destroy(this.targetObject);
 
-            if (GUI.Button(new Rect(10f, 75f, 40f, 20f), "Copy"))
-                this.copiedGameObject[this.targetCopiedIndex] = this.targetObject;
+            if (GUI.Button(new Rect(10f, 75f, 40f, 20f), "Copy")){
+                if (this.onlyUseVarCopy)
+                    this.copiedVar[this.targetCopiedIndex] = this.targetObject;
+                else
+                    this.copiedGameObject[this.targetCopiedIndex] = this.targetObject;
+            }
 
             if (this.copiedGameObject[this.targetCopiedIndex] != null && GUI.Button(new Rect(55f, 75f, 25f, 20f), "P")){
                 GameObject obj = Instantiate(this.copiedGameObject[this.targetCopiedIndex]);
@@ -476,8 +484,12 @@ namespace PandaHexCode.PDebug{
                         this.objectComponentMethodesWindowEnable = 0;
                 }
 
-                if (GUILayout.Button("Copy"))
-                    this.copiedComponent[this.targetCopiedIndex] = comp;
+                if (GUILayout.Button("Copy")){
+                    if (this.onlyUseVarCopy)
+                        this.copiedVar[this.targetCopiedIndex] = comp;
+                    else
+                        this.copiedComponent[this.targetCopiedIndex] = comp;
+                }
 
                 GUILayout.EndHorizontal();
             }
@@ -780,7 +792,7 @@ namespace PandaHexCode.PDebug{
             else if (type.Equals(typeof(UnityEngine.Vector4)))
                 var = new Vector4(StringToFloat(valStr.Split(',')[0]), StringToFloat(valStr.Split(',')[1]), StringToFloat(valStr.Split(',')[2]), StringToFloat(valStr.Split(',')[3]));
             else if (type.Equals(typeof(bool)) | type.Equals(typeof(Boolean))){
-                if (valStr.Equals("false", StringComparison.OrdinalIgnoreCase))
+                if (valStr.Equals("false", StringComparison.OrdinalIgnoreCase) | valStr.Equals("f", StringComparison.OrdinalIgnoreCase))
                     var = false;
                 else
                     var = true;
@@ -834,6 +846,8 @@ namespace PandaHexCode.PDebug{
             if (this.targetEnum == null)
                 return;
 
+            this.scrollPosition[8] = GUILayout.BeginScrollView(this.scrollPosition[8]);
+
             for (int i = 0; i < Enum.GetValues((Type)this.targetEnum).Length; i++){
                 GUILayout.BeginHorizontal();
 
@@ -842,8 +856,6 @@ namespace PandaHexCode.PDebug{
 
                 GUILayout.EndHorizontal();
             }
-
-            this.scrollPosition[7] = GUILayout.BeginScrollView(this.scrollPosition[7]);
 
             GUILayout.EndScrollView();
         }
