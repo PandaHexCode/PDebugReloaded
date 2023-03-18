@@ -4,6 +4,9 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Threading;
+using System.IO;
+using System.Collections;
+using System.Linq;
 
 namespace PandaHexCode.PDebug{
 
@@ -42,6 +45,8 @@ namespace PandaHexCode.PDebug{
         private FieldInfo targetFieldInfo;
         private bool isTargetField = false;
 
+        private static AppDomain customCodeAppDomain = null;/*For executing code at runtime*/
+
         private int targetCopiedIndex = 0;
         private bool onlyUseVarCopy = false /*If true, it always use CopiedVar for copy button*/;
 
@@ -62,6 +67,7 @@ namespace PandaHexCode.PDebug{
                     PDebugReloaded.instance = gm.AddComponent<PDebugReloaded>();
                     PDebugReloaded.instance.logExceptions = this.logExceptions;
                     PDebugReloaded.instance.backgroundColor = this.backgroundColor;
+                    PDebugReloaded.customCodeAppDomain = AppDomain.CreateDomain("CustomCodeAppDomain");
                     DontDestroyOnLoad(instance);
                     Destroy(this);
                 }
@@ -104,6 +110,23 @@ namespace PandaHexCode.PDebug{
                     this.targetCopiedIndex = 3;
                 else if (Input.GetKeyDown("5"))
                     this.targetCopiedIndex = 4;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Z))
+            {
+                string code = @"
+            using UnityEngine;
+            public class MyClass
+            {
+                public static void MyMethod()
+                {
+                    Debug.Log(""Hallo von MyMethod!"");
+                }
+            }
+        ";
+
+                // Die CompileAndLoadAssembly-Methode aufrufen
+                TryToExecuteCode(code);
             }
 
             if (this.currentState == State.Objects) {
@@ -256,8 +279,24 @@ namespace PandaHexCode.PDebug{
 
                         if(this.assemblyWindowEnable == 1)
                             GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyWindow, "Assemblies");
-                        else
+                        else if(this.assemblyWindowEnable == 2)
                             GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyTypesWindow, this.targetAssembly.GetName().Name + " - Types");
+                        else
+                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyTypeInstancesWindow, this.targetType.Name + " - Instances");
+                    }
+
+                    if(this.materialsWindowEnable > 0){
+                        int yPos = 205;
+                        int xPos = 10;
+                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable)
+                            yPos = 350;
+                        if (this.assemblyWindowEnable > 0)
+                            xPos = 420;
+
+                        if(this.materialsWindowEnable == 1)
+                            GUI.Window(8, new Rect(xPos, yPos, 405, 280), MaterialsWindow, "Loaded Materials");
+                        else
+                            GUI.Window(8, new Rect(xPos, yPos, 405, 280), MaterialEditWindow, this.targetMaterial.name + " - Edit");
                     }
 
                     break;
@@ -576,7 +615,7 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
         }
 
-        private string editValueInput = string.Empty;
+        private string editValueInput;
         private object[] copiedVar = new object[5];
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
@@ -830,15 +869,9 @@ namespace PandaHexCode.PDebug{
                 Int64.TryParse(valStr, out output);
                 var = output;
             }else if (type.Equals(typeof(Color))){
-                Color color = Color.white;
-                valStr = valStr.Replace("#", "");
-                ColorUtility.TryParseHtmlString("#" + valStr, out color);
-                var = color;
+                var = (Color32)GetColorFromHex(valStr);
             }else if (type.Equals(typeof(Color32))){
-                Color color = Color.white;
-                valStr = valStr.Replace("#", "");
-                ColorUtility.TryParseHtmlString("#" + valStr, out color);
-                var = (Color32)color;
+                var = (Color32)GetColorFromHex(valStr);
             }else if (type.IsEnum){
                 if (valStr.Equals("v")){
                     this.viewEnumValuesWindowEnable = true;
@@ -852,6 +885,18 @@ namespace PandaHexCode.PDebug{
             return var;
         }
 
+        private Color GetColorFromHex(string hex){
+            Color color = Color.white;
+            hex = hex.Replace("#", "");
+            ColorUtility.TryParseHtmlString("#" + hex, out color);
+            return color;
+        }
+
+        public static string ColorToHex(Color color){
+            Color32 color32 = color;
+            string hex = color32.r.ToString("X2") + color32.g.ToString("X2") + color32.b.ToString("X2");
+            return hex;
+        }
 
         private bool viewEnumValuesWindowEnable = false;
         private object targetEnum;
@@ -1081,6 +1126,14 @@ namespace PandaHexCode.PDebug{
                     this.assemblyWindowEnable = 1;
             }
 
+            if (GUI.Button(new Rect(100f, 125f, 85f, 20f), "Materials")){
+                if (this.materialsWindowEnable > 0)
+                    this.materialsWindowEnable = 0;
+                else
+                    this.materialsWindowEnable = 1;
+            }
+
+
             if (GUI.Button(new Rect(100f, 100f, 85f, 20f), this.customLight == null ?  "CLight: Off" : "CLight: On")){
                 if (this.customLight != null)
                     Destroy(this.customLight.gameObject);
@@ -1199,6 +1252,9 @@ namespace PandaHexCode.PDebug{
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
                 this.otherRenderWindowEnable = false;
 
+            if (this.targetCamera == null)
+                this.targetCamera = Camera.main;
+
             if (GUI.Button(new Rect(10f, 70f, 85f, 20f), "Wireframe")){
                 CheckTargetCameraMod();
                 this.targetCamera.GetComponent<RenderCameraMod>().wireframe = !this.targetCamera.GetComponent<RenderCameraMod>().wireframe;
@@ -1236,6 +1292,159 @@ namespace PandaHexCode.PDebug{
             }
         }
 
+        private int materialsWindowEnable = 0;
+        private Material targetMaterial;
+        private void MaterialsWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.materialsWindowEnable = 0;
+
+            List<Material> materials = new List<Material>();
+
+            Renderer[] renderers = FindObjectsOfType<Renderer>();
+
+            foreach (Renderer renderer in renderers){
+                foreach (Material material in renderer.sharedMaterials){
+                    if (!materials.Contains(material)){
+                        materials.Add(material);
+                    }
+                }
+            }
+
+            this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
+
+            foreach(Material material in materials){
+                GUILayout.BeginHorizontal();
+
+                try{
+                    GUILayout.Label(material.name);
+                    if (GUILayout.Button("Edit")){
+                        this.materialsWindowEnable = 2;
+                        this.targetMaterial = material;
+                    }
+                }catch(Exception e){
+                    GUILayout.EndHorizontal();
+                    continue;
+                }
+
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+        }
+
+        private Texture[] copiedTexture = new Texture[5];
+        private void MaterialEditWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 50, 20), "Back") | this.targetMaterial == null)
+                this.materialsWindowEnable = 1;
+
+            this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
+
+            GUILayout.Label("CopyTextureFromPath");
+
+            GUILayout.BeginHorizontal();
+
+            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            if (GUILayout.Button("Copy")){
+                if (this.onlyUseVarCopy)
+                    this.copiedVar[this.targetCopiedIndex] = LoadTexture(this.editValueInput);
+                else
+                    this.copiedTexture[this.targetCopiedIndex] = LoadTexture(this.editValueInput);
+            }
+
+            GUILayout.EndHorizontal();
+
+            foreach (string propName in this.targetMaterial.GetTexturePropertyNames()){
+                Texture tex = this.targetMaterial.GetTexture(propName);
+                if(tex == null){
+                    GUILayout.BeginHorizontal();
+
+                    GUILayout.Label(propName + " - No texture");
+                    if (this.copiedTexture[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
+                        this.targetMaterial.SetTexture(propName, this.copiedTexture[this.targetCopiedIndex]);
+
+                    GUILayout.EndHorizontal();
+                    continue;
+                }
+
+                GUILayout.Label(propName);
+
+                GUILayout.Label(tex, GUILayout.Width(120), GUILayout.Height(120));
+
+                GUILayout.BeginHorizontal();
+
+                if (GUILayout.Button("Copy")){
+                    if (this.onlyUseVarCopy)
+                        this.copiedVar[this.targetCopiedIndex] = tex;
+                    else
+                        this.copiedTexture[this.targetCopiedIndex] = tex;
+                }
+
+                if (this.copiedTexture[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
+                    this.targetMaterial.SetTexture(propName, this.copiedTexture[this.targetCopiedIndex]);
+
+                if(GUILayout.Button("Remove texture"))
+                    this.targetMaterial.SetTexture(propName, null);
+
+                if (GUILayout.Button("Export"))
+                    ExportTextureToPNG(tex, this.editValueInput);
+
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.Label("Colour");
+
+            GUILayout.BeginHorizontal();
+
+            this.editValueInput = GUILayout.TextField(this.editValueInput);
+
+            if (GUILayout.Button("Get"))
+                this.editValueInput = ColorToHex(this.targetMaterial.color);
+
+            if (GUILayout.Button("Set"))
+                this.targetMaterial.color = GetColorFromHex(this.editValueInput);
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndScrollView();
+        }
+
+        public static Texture LoadTexture(string path){
+            Texture2D tex = new Texture2D(2, 2);
+
+            byte[] fileData = File.ReadAllBytes(path);
+            bool success = tex.LoadImage(fileData);
+
+            if (!success){
+                Debug.LogError("Failed to load texture from file: " + path);
+                return null;
+            }
+
+            return tex;
+        }
+
+        public static void ExportTextureToPNG(Texture texture, string filename){
+            RenderTexture tmp = RenderTexture.GetTemporary(
+            texture.width, texture.height, 0, RenderTextureFormat.Default, RenderTextureReadWrite.Linear
+        );
+            Graphics.Blit(texture, tmp);
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = tmp;
+            Texture2D tex = new Texture2D(texture.width, texture.height);
+            tex.ReadPixels(new Rect(0, 0, tmp.width, tmp.height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(tmp);
+
+            byte[] bytes = tex.EncodeToPNG();
+            File.WriteAllBytes(filename, bytes);
+
+            UnityEngine.Object.DestroyImmediate(tex);
+        }
+
         private int assemblyWindowEnable = 0;
         private Assembly targetAssembly = null;
         private void AssemblyWindow(int windowID){
@@ -1246,7 +1455,29 @@ namespace PandaHexCode.PDebug{
 
             this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
 
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()){
+            GUILayout.Label("MainAppDomain");
+            DrawAppDomainAssembly(AppDomain.CurrentDomain);
+            GUILayout.Label("CustomCodeAppDomain");
+            DrawAppDomainAssembly(PDebugReloaded.customCodeAppDomain);
+           
+            GUILayout.EndScrollView();
+        }
+
+        private void DrawAppDomainAssembly(AppDomain appDomain){
+            GUILayout.BeginHorizontal();
+            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            if (GUILayout.Button("Load")){
+                if (appDomain != AppDomain.CurrentDomain)
+                    PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(this.editValueInput));
+                else
+                    Assembly.LoadFrom(this.editValueInput);
+
+                this.editValueInput = string.Empty;
+            }
+
+            GUILayout.EndHorizontal();
+
+            foreach (Assembly assembly in appDomain.GetAssemblies()){
                 GUILayout.BeginHorizontal();
 
                 GUILayout.Label(assembly.GetName().Name);
@@ -1254,11 +1485,35 @@ namespace PandaHexCode.PDebug{
                     this.targetAssembly = assembly;
                     this.assemblyWindowEnable = 2;
                 }
-              
+
                 GUILayout.EndHorizontal();
             }
 
-            GUILayout.EndScrollView();
+            if (appDomain != AppDomain.CurrentDomain && GUILayout.Button("Delete & Add " + appDomain.FriendlyName))
+                UnloadAndAddCustomCodeAppDomain();
+        }
+
+        private void UnloadAndAddCustomCodeAppDomain(bool tryToCopyTheAssemblies = false, string exceptLocation = ""){
+            List<string> assemblies = new List<string>();
+            if (tryToCopyTheAssemblies){
+                foreach (Assembly assembly in PDebugReloaded.customCodeAppDomain.GetAssemblies())
+                    assemblies.Add(assembly.Location);
+            }
+
+            AppDomain.Unload(PDebugReloaded.customCodeAppDomain);
+            PDebugReloaded.customCodeAppDomain = null;
+            PDebugReloaded.customCodeAppDomain = AppDomain.CreateDomain("CustomCodeAppDomain");
+
+            if (tryToCopyTheAssemblies){
+                foreach (string assembly in assemblies){
+                    try{
+                        if (!assembly.EndsWith(exceptLocation) && !string.IsNullOrEmpty(assembly))
+                            PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(assembly));
+                    }catch(Exception e){
+                        Debug.Log(assembly);
+                    }
+                }
+            }
         }
 
         private void AssemblyTypesWindow(int windowID){
@@ -1281,17 +1536,108 @@ namespace PandaHexCode.PDebug{
                     GUILayout.Label(" (Mono)");
                     if (this.targetObject != null && GUILayout.Button("Add to GameObject"))
                         this.targetObject.AddComponent(type);
+
+                    if (GUILayout.Button("Instances")){
+                        this.targetType = type;
+                        this.assemblyWindowEnable = 3;
+                    }
                 }
 
                 if (GUILayout.Button("CreateInstance")){
                     this.targetAssembly.CreateInstance(type.Name);
                 }
-
+        
 
                 GUILayout.EndHorizontal();
             }
 
             GUILayout.EndScrollView();
+        }
+
+        private Type targetType = null;
+        private void AssemblyTypeInstancesWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), "") | this.targetType == null)
+                this.assemblyWindowEnable = 0;
+
+            this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
+
+            if (GUILayout.Button("Back"))
+                this.assemblyWindowEnable = 2;
+
+            foreach (var obj in Resources.FindObjectsOfTypeAll(this.targetType)){
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(obj.name);
+                if (GUILayout.Button("Set TargetObject")){
+                    Component comp = (Component)obj;
+                    this.targetObject = comp.gameObject;
+                }
+                GUILayout.EndHorizontal();
+            }
+
+
+            GUILayout.EndScrollView();
+        }
+
+        private List<string> customCodeAssemblies = new List<string>();
+        private void TryToExecuteCode(string code){
+            /*var assemblyName = "MyDynamicAssembly";
+            var outputAssemblyName = $"{assemblyName}.dll";
+            var outputAssemblyPath = Path.Combine(Environment.CurrentDirectory, outputAssemblyName);
+
+            UnloadAndAddCustomCodeAppDomain(true, outputAssemblyName);
+
+            if (File.Exists(outputAssemblyPath)){
+                try{
+                    File.Delete(outputAssemblyPath);
+                }catch(Exception e){
+                    assemblyName = "MyDynamicAssembly" + UnityEngine.Random.Range(0.1f, 1000.1f);
+                    outputAssemblyName = $"{assemblyName}.dll";
+                }
+            }
+
+            outputAssemblyPath = Path.Combine(Environment.CurrentDirectory, outputAssemblyName);
+            this.customCodeAssemblies.Add(outputAssemblyPath);
+
+            // Compile the code
+            var provider = new Microsoft.CSharp.CSharpCodeProvider();
+            var parameters = new System.CodeDom.Compiler.CompilerParameters();
+            parameters.GenerateExecutable = false;
+            parameters.GenerateInMemory = true;
+            parameters.OutputAssembly = outputAssemblyName;
+
+            Debug.Log(typeof(UnityEngine.Object).Assembly.Location);
+
+            foreach(Assembly assembly1 in AppDomain.CurrentDomain.GetAssemblies())
+                parameters.ReferencedAssemblies.Add(assembly1.Location);
+
+            Debug.Log("2");
+            var results = provider.CompileAssemblyFromSource(parameters, code);
+            Debug.Log("1");
+            if (results.Errors.HasErrors){
+                foreach (System.CodeDom.Compiler.CompilerError error in results.Errors){
+                    Debug.LogError("!" + error.ErrorText);
+                }
+                return;
+            }
+
+            var assembly = PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(outputAssemblyName));
+            var type = assembly.GetType("MyClass");
+            var method = type.GetMethod("MyMethod");
+            method.Invoke(null, null);*/
+        }
+
+        private void OnApplicationQuit(){
+            UnloadAndAddCustomCodeAppDomain();
+            foreach (string str in this.customCodeAssemblies){
+                try{
+                    if (File.Exists(str))
+                        File.Delete(str);
+                }catch (Exception e){
+
+                }
+            }
         }
 
         private void CustomWindow(int windowID){
