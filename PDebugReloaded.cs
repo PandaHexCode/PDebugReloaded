@@ -67,7 +67,9 @@ namespace PandaHexCode.PDebug{
                     PDebugReloaded.instance = gm.AddComponent<PDebugReloaded>();
                     PDebugReloaded.instance.logExceptions = this.logExceptions;
                     PDebugReloaded.instance.backgroundColor = this.backgroundColor;
+#if UNITY_2018_1_OR_NEWER
                     PDebugReloaded.customCodeAppDomain = AppDomain.CreateDomain("CustomCodeAppDomain");
+#endif
                     DontDestroyOnLoad(instance);
                     Destroy(this);
                 }
@@ -615,7 +617,7 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
         }
 
-        private string editValueInput;
+        private string editValueInput = string.Empty;
         private object[] copiedVar = new object[5];
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
@@ -1073,7 +1075,9 @@ namespace PandaHexCode.PDebug{
 
                 string sceneName = string.Empty;
                 try{//If it gives an error here, simple delete "sceneName = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(i).name;"
+#if UNITY_2018_1_OR_NEWER
                     sceneName = UnityEngine.SceneManagement.SceneManager.GetSceneByBuildIndex(i).name;
+#endif
                 }catch (Exception e){}
 
                 GUILayout.Label(i.ToString() + " " + sceneName);
@@ -1306,11 +1310,14 @@ namespace PandaHexCode.PDebug{
 
             foreach (Renderer renderer in renderers){
                 foreach (Material material in renderer.sharedMaterials){
-                    if (!materials.Contains(material)){
+                    if (!materials.Contains(material) && material != null){
                         materials.Add(material);
                     }
                 }
             }
+
+            List<Material> sortedMaterials = materials.OrderBy(m => m.name).ToList();
+            materials = sortedMaterials;
 
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
@@ -1357,42 +1364,58 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.EndHorizontal();
 
-            foreach (string propName in this.targetMaterial.GetTexturePropertyNames()){
-                Texture tex = this.targetMaterial.GetTexture(propName);
-                if(tex == null){
+            string[] properties = null;
+
+#if UNITY_2018_1_OR_NEWER
+            properties = this.targetMaterial.GetTexturePropertyNames();
+#else
+            properties = new string[] { "_MainTex", "_BumpMap", "_DetailNormalMap", "_ParallaxMap", "_OcclusionMap", "_EmissionMap", "_DetailMask", "_DetailAlbedoMap", "_MetallicGlossMap"};
+#endif
+
+            foreach (string propName in properties){
+                try
+                {
+
+                    Texture tex = this.targetMaterial.GetTexture(propName);
+                    if (tex == null)
+                    {
+                        GUILayout.BeginHorizontal();
+
+                        GUILayout.Label(propName + " - No texture");
+                        if (this.copiedTexture[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
+                            this.targetMaterial.SetTexture(propName, this.copiedTexture[this.targetCopiedIndex]);
+
+                        GUILayout.EndHorizontal();
+                        continue;
+                    }
+
+                    GUILayout.Label(propName);
+
+                    GUILayout.Label(tex, GUILayout.Width(120), GUILayout.Height(120));
+
                     GUILayout.BeginHorizontal();
 
-                    GUILayout.Label(propName + " - No texture");
+                    if (GUILayout.Button("Copy"))
+                    {
+                        if (this.onlyUseVarCopy)
+                            this.copiedVar[this.targetCopiedIndex] = tex;
+                        else
+                            this.copiedTexture[this.targetCopiedIndex] = tex;
+                    }
+
                     if (this.copiedTexture[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
                         this.targetMaterial.SetTexture(propName, this.copiedTexture[this.targetCopiedIndex]);
 
+                    if (GUILayout.Button("Remove texture"))
+                        this.targetMaterial.SetTexture(propName, null);
+
+                    if (GUILayout.Button("Export"))
+                        ExportTextureToPNG(tex, this.editValueInput);
+
                     GUILayout.EndHorizontal();
+                }catch(Exception e){
                     continue;
                 }
-
-                GUILayout.Label(propName);
-
-                GUILayout.Label(tex, GUILayout.Width(120), GUILayout.Height(120));
-
-                GUILayout.BeginHorizontal();
-
-                if (GUILayout.Button("Copy")){
-                    if (this.onlyUseVarCopy)
-                        this.copiedVar[this.targetCopiedIndex] = tex;
-                    else
-                        this.copiedTexture[this.targetCopiedIndex] = tex;
-                }
-
-                if (this.copiedTexture[this.targetCopiedIndex] != null && GUILayout.Button("Paste"))
-                    this.targetMaterial.SetTexture(propName, this.copiedTexture[this.targetCopiedIndex]);
-
-                if(GUILayout.Button("Remove texture"))
-                    this.targetMaterial.SetTexture(propName, null);
-
-                if (GUILayout.Button("Export"))
-                    ExportTextureToPNG(tex, this.editValueInput);
-
-                GUILayout.EndHorizontal();
             }
 
             GUILayout.Label("Colour");
@@ -1457,9 +1480,12 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.Label("MainAppDomain");
             DrawAppDomainAssembly(AppDomain.CurrentDomain);
-            GUILayout.Label("CustomCodeAppDomain");
-            DrawAppDomainAssembly(PDebugReloaded.customCodeAppDomain);
-           
+
+            if (PDebugReloaded.customCodeAppDomain != null){
+                GUILayout.Label("CustomCodeAppDomain");
+                DrawAppDomainAssembly(PDebugReloaded.customCodeAppDomain);
+            }
+
             GUILayout.EndScrollView();
         }
 
@@ -1494,6 +1520,7 @@ namespace PandaHexCode.PDebug{
         }
 
         private void UnloadAndAddCustomCodeAppDomain(bool tryToCopyTheAssemblies = false, string exceptLocation = ""){
+#if UNITY_2018_1_OR_NEWER
             List<string> assemblies = new List<string>();
             if (tryToCopyTheAssemblies){
                 foreach (Assembly assembly in PDebugReloaded.customCodeAppDomain.GetAssemblies())
@@ -1514,6 +1541,7 @@ namespace PandaHexCode.PDebug{
                     }
                 }
             }
+#endif
         }
 
         private void AssemblyTypesWindow(int windowID){
