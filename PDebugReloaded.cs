@@ -3,13 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Net;
-using System.Net.Sockets;
-using System.Collections;
 using System.Threading;
-using System.Text;
-using System.IO;
-
 
 namespace PandaHexCode.PDebug{
 
@@ -254,6 +248,18 @@ namespace PandaHexCode.PDebug{
                         else
                             GUI.Window(5, new Rect(10, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
                     }
+
+                    if (this.assemblyWindowEnable > 0){
+                        int yPos = 205;
+                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable)
+                            yPos = 350;
+
+                        if(this.assemblyWindowEnable == 1)
+                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyWindow, "Assemblies");
+                        else
+                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyTypesWindow, this.targetAssembly.GetName().Name + " - Types");
+                    }
+
                     break;
 
                 case State.Custom:
@@ -1068,6 +1074,12 @@ namespace PandaHexCode.PDebug{
                 this.otherRenderWindowEnable = !this.otherRenderWindowEnable;
             if (GUI.Button(new Rect(200f, 70f, 85f, 20f), "Custom"))
                 this.currentState = State.Custom;
+            if (GUI.Button(new Rect(10f, 125f, 85f, 20f), "Assemblies")){
+                if (this.assemblyWindowEnable > 0)
+                    this.assemblyWindowEnable = 0;
+                else
+                    this.assemblyWindowEnable = 1;
+            }
 
             if (GUI.Button(new Rect(100f, 100f, 85f, 20f), this.customLight == null ?  "CLight: Off" : "CLight: On")){
                 if (this.customLight != null)
@@ -1222,6 +1234,64 @@ namespace PandaHexCode.PDebug{
                         break;
                 }
             }
+        }
+
+        private int assemblyWindowEnable = 0;
+        private Assembly targetAssembly = null;
+        private void AssemblyWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.assemblyWindowEnable = 0;
+
+            this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
+
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies()){
+                GUILayout.BeginHorizontal();
+
+                GUILayout.Label(assembly.GetName().Name);
+                if (GUILayout.Button("Types")){
+                    this.targetAssembly = assembly;
+                    this.assemblyWindowEnable = 2;
+                }
+              
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+        }
+
+        private void AssemblyTypesWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), "") | this.targetAssembly == null)
+                this.assemblyWindowEnable = 0;
+
+            this.scrollPosition[1] = GUILayout.BeginScrollView(this.scrollPosition[1]);
+
+            if (GUILayout.Button("Back"))
+                this.assemblyWindowEnable = 1;
+
+            foreach (Type type in this.targetAssembly.GetTypes()){
+                GUILayout.BeginHorizontal();
+
+                GUILayout.Label(type.Name);
+
+                if (type.IsSubclassOf(typeof(Component))){
+                    GUILayout.Label(" (Mono)");
+                    if (this.targetObject != null && GUILayout.Button("Add to GameObject"))
+                        this.targetObject.AddComponent(type);
+                }
+
+                if (GUILayout.Button("CreateInstance")){
+                    this.targetAssembly.CreateInstance(type.Name);
+                }
+
+
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
         }
 
         private void CustomWindow(int windowID){
