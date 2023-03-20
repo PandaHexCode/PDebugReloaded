@@ -739,6 +739,13 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
         }
 
+        private void InvokeMethod(MethodInfo method, object[] paramets){
+            if (method.ReturnType == typeof(IEnumerator) || method.ReturnType == typeof(Coroutine))
+                StartCoroutine((IEnumerator)method.Invoke(this.targetComponent, paramets));
+            else
+                method.Invoke(this.targetComponent, paramets);
+        }
+
         private void MethodDraw(MethodInfo method){
             GUILayout.BeginHorizontal();
 
@@ -754,7 +761,7 @@ namespace PandaHexCode.PDebug{
             GUILayout.Label(endString);
             if (GUILayout.Button("Invoke")){
                 if (method.GetParameters().Length == 0)
-                    method.Invoke(this.targetComponent, null);
+                    InvokeMethod(method, null);
                 else{
                     this.objectComponentMethodesWindowEnable = 2;
                     this.targetMethod = method;
@@ -814,8 +821,8 @@ namespace PandaHexCode.PDebug{
                         }
                         i++;
                     }
-                    
-                    this.targetMethod.Invoke(this.targetComponent, parameters);
+
+                    InvokeMethod(this.targetMethod, parameters);
                     this.objectComponentMethodesWindowEnable = 3;
                 }
                 catch (Exception e){
