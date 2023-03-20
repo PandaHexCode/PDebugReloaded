@@ -1154,8 +1154,13 @@ namespace PandaHexCode.PDebug{
                 else
                     this.otherPhysicsWindowEnable = 1;
             }
-            if (GUI.Button(new Rect(190f, 100f, 85f, 20f), "Render"))
+
+            if (GUI.Button(new Rect(190f, 100f, 85f, 20f), "Render")){
+                if (this.targetCamera == null)
+                    this.targetCamera = Camera.main;
                 this.otherRenderWindowEnable = !this.otherRenderWindowEnable;
+            }
+
             if (GUI.Button(new Rect(200f, 70f, 85f, 20f), "Custom"))
                 this.currentState = State.Custom;
             if (GUI.Button(new Rect(10f, 125f, 85f, 20f), "Assemblies")){
@@ -1188,6 +1193,8 @@ namespace PandaHexCode.PDebug{
                     Destroy(this.freeCam.gameObject);
                     this.oldCamera.gameObject.SetActive(true);
                     this.targetObject = this.oldCamera;
+                    if (this.targetCamera == null)
+                        this.targetCamera = Camera.main;
                     return;
                 }
                 if (this.targetCamera == null)
@@ -1292,9 +1299,6 @@ namespace PandaHexCode.PDebug{
 
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
                 this.otherRenderWindowEnable = false;
-
-            if (this.targetCamera == null)
-                this.targetCamera = Camera.main;
 
             if (GUI.Button(new Rect(10f, 70f, 85f, 20f), "Wireframe")){
                 CheckTargetCameraMod();
