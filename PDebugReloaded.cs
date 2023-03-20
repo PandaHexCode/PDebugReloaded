@@ -115,23 +115,6 @@ namespace PandaHexCode.PDebug{
                     this.targetCopiedIndex = 4;
             }
 
-            if (Input.GetKeyDown(KeyCode.Z))
-            {
-                string code = @"
-            using UnityEngine;
-            public class MyClass
-            {
-                public static void MyMethod()
-                {
-                    Debug.Log(""Hallo von MyMethod!"");
-                }
-            }
-        ";
-
-                // Die CompileAndLoadAssembly-Methode aufrufen
-                TryToExecuteCode(code);
-            }
-
             if (this.currentState == State.Objects) {
                 if (Input.GetKeyDown(KeyCode.I)) {/*Try to get a TargetObject for the Objects Tab*/
                     if (this.targetCamera == null)
@@ -264,12 +247,20 @@ namespace PandaHexCode.PDebug{
 
                     if(this.otherResourcesWindowEnable)
                         GUI.Window(1, new Rect(395, 40, 245, 180), ResourcesWindow, "Resources");
-                    
-                    if (this.otherPhysicsWindowEnable)
-                        GUI.Window(2, new Rect(10, 205, 500, 140), PhysicsWindow, "Physics");
+
+                    if (this.otherPhysicsWindowEnable > 0){
+                        int yW = 280;
+                        if (this.assemblyWindowEnable > 0 | this.materialsWindowEnable > 0)
+                            yW = 140;
+
+                        if(this.otherPhysicsWindowEnable == 1)
+                            GUI.Window(2, new Rect(10, 205, 500, yW), PhysicsWindow, "Physics");
+                        else
+                            GUI.Window(2, new Rect(10, 205, 500, yW), EditValueWindow, this.targetPropertyInfo.Name + " - Edit");
+                    }
 
                     if (this.otherRenderWindowEnable){
-                        if (this.otherPhysicsWindowEnable)
+                        if (this.otherPhysicsWindowEnable > 0)
                             GUI.Window(5, new Rect(515, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
                         else
                             GUI.Window(5, new Rect(10, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
@@ -277,7 +268,7 @@ namespace PandaHexCode.PDebug{
 
                     if (this.assemblyWindowEnable > 0){
                         int yPos = 205;
-                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable)
+                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
                             yPos = 350;
 
                         if(this.assemblyWindowEnable == 1)
@@ -291,7 +282,7 @@ namespace PandaHexCode.PDebug{
                     if(this.materialsWindowEnable > 0){
                         int yPos = 205;
                         int xPos = 10;
-                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable)
+                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
                             yPos = 350;
                         if (this.assemblyWindowEnable > 0)
                             xPos = 420;
@@ -314,16 +305,22 @@ namespace PandaHexCode.PDebug{
         private void DrawMainButtons(){
             if (GUI.Button(new Rect(10f, 10f, 70f, 20f), "Console"))
                 this.currentState = State.Console;
-            if (GUI.Button(new Rect(85f, 10f, 70f, 20f), "Objects"))
+            if (GUI.Button(new Rect(85f, 10f, 70f, 20f), "Objects")){
+                if (this.objectComponentValuesWindowEnable > 0)
+                    this.objectComponentValuesWindowEnable = 1;
                 this.currentState = State.Objects;
+            }
             if (GUI.Button(new Rect(160f, 10f, 70f, 20f), "Time"))
                 this.currentState = State.Time;
             if (GUI.Button(new Rect(235f, 10f, 70f, 20f), "Scene"))
                 this.currentState = State.Scene;
             if (GUI.Button(new Rect(310f, 10f, 80f, 20f), "Application"))
                 this.currentState = State.Application;
-            if (GUI.Button(new Rect(395f, 10f, 70f, 20f), "Other"))
+            if (GUI.Button(new Rect(395f, 10f, 70f, 20f), "Other")){
+                if(this.otherPhysicsWindowEnable > 0)
+                    this.otherPhysicsWindowEnable = 1;
                 this.currentState = State.Other;
+            }
             if (GUI.Button(new Rect(470f, 10f, 100f, 20f), "CopyIndex: " + (this.targetCopiedIndex + 1))){
                 if (this.targetCopiedIndex < 4)
                     this.targetCopiedIndex++;
@@ -577,6 +574,7 @@ namespace PandaHexCode.PDebug{
                         this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
                         this.objectComponentValuesWindowEnable = 2;
                         this.isTargetField = true;
+                        this.editPhysicsValue = false;
                     }
 
                     GUILayout.EndHorizontal();
@@ -605,6 +603,7 @@ namespace PandaHexCode.PDebug{
                         this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
                         this.objectComponentValuesWindowEnable = 2;
                         this.isTargetField = false;
+                        this.editPhysicsValue = false;
                     }
 
                     GUILayout.EndHorizontal();
@@ -619,48 +618,60 @@ namespace PandaHexCode.PDebug{
         }
 
         private object[] copiedVar = new object[5];
+        private bool editPhysicsValue = false;
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
-            if (this.targetComponent == null | (this.targetPropertyInfo == null && this.targetFieldInfo == null))
+            if ((!this.editPhysicsValue && this.targetComponent == null) | (this.targetPropertyInfo == null && this.targetFieldInfo == null))
                 return;
 
             GUILayout.BeginVertical();
 
             GUILayout.BeginHorizontal();
 
-            if (GUILayout.Button("Back"))
-                this.objectComponentValuesWindowEnable = 1;
+            if (GUILayout.Button("Back")){
+                if (!this.editPhysicsValue)
+                    this.objectComponentValuesWindowEnable = 1;
+                else
+                    this.otherPhysicsWindowEnable = 1;
+
+                return;
+            }
+
+            object target = null;
+            if (!this.editPhysicsValue)
+                target = this.targetComponent;
+            int newWindow = -1;
 
             if (GUILayout.Button("CopyVar")){
                 if(this.isTargetField)
-                    this.copiedVar[this.targetCopiedIndex] = this.targetFieldInfo.GetValue(this.targetComponent);
+                    this.copiedVar[this.targetCopiedIndex] = this.targetFieldInfo.GetValue(target);
                 else
-                    this.copiedVar[this.targetCopiedIndex] = this.targetPropertyInfo.GetValue(this.targetComponent, null);
+                    this.copiedVar[this.targetCopiedIndex] = this.targetPropertyInfo.GetValue(target, null);
             }
 
             if (this.copiedVar[this.targetCopiedIndex] != null && GUILayout.Button("PasteVar")){
-                if((!this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType())
-                    | (this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetFieldInfo.GetValue(this.targetComponent).GetType())){
-                    this.objectComponentValuesWindowEnable = 4;
+                if((!this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetPropertyInfo.GetValue(target, null).GetType())
+                    | (this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetFieldInfo.GetValue(target).GetType())){
+                    newWindow = 4;
                     return;
                 }
 
                 if (this.isTargetField)
-                    this.targetFieldInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex]);
+                    this.targetFieldInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex]);
                 else
-                    this.targetPropertyInfo.SetValue(this.targetComponent, this.copiedVar[this.targetCopiedIndex], null);
+                    this.targetPropertyInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex], null);
 
-                this.objectComponentValuesWindowEnable = 3;
+                newWindow = 3;
             }
 
             if (GUILayout.Button("SetNull")){
                 if (this.isTargetField)
-                    this.targetFieldInfo.SetValue(this.targetComponent, null);
+                    this.targetFieldInfo.SetValue(target, null);
                 else
-                    this.targetPropertyInfo.SetValue(this.targetComponent, null, null);
+                    this.targetPropertyInfo.SetValue(target, null, null);
 
-                this.objectComponentValuesWindowEnable = 3;
+                newWindow = 3;
             }
 
             GUILayout.EndHorizontal();
@@ -671,31 +682,38 @@ namespace PandaHexCode.PDebug{
                 try{
 
                     if (!this.isTargetField){
-                        object var = TryToCastString(this.editValueInput[0], this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType());
+                        object var = TryToCastString(this.editValueInput[0], this.targetPropertyInfo.GetValue(target, null).GetType());
                         if (var == null){
-                            this.objectComponentValuesWindowEnable = 4;
+                            newWindow = 4;
                             return;
                         }else
-                            this.objectComponentValuesWindowEnable = 3;
-                        this.targetPropertyInfo.SetValue(this.targetComponent, var, null);
+                            newWindow = 3;
+                        this.targetPropertyInfo.SetValue(target, var, null);
                     }else{
-                        object var = TryToCastString(this.editValueInput[0], this.targetFieldInfo.GetValue(this.targetComponent).GetType());
+                        object var = TryToCastString(this.editValueInput[0], this.targetFieldInfo.GetValue(target).GetType());
                         if (var == null){
-                            this.objectComponentValuesWindowEnable = 4;
+                            newWindow = 4;
                             return;
                         }else
-                            this.objectComponentValuesWindowEnable = 3;
-                        this.targetFieldInfo.SetValue(this.targetComponent, var);
+                            newWindow = 3;
+                        this.targetFieldInfo.SetValue(target, var);
                     }
                 
                 }catch (Exception e){
-                    this.objectComponentValuesWindowEnable = 4;
+                    newWindow = 4;
                 }
             }
 
-            if (this.objectComponentValuesWindowEnable == 3)
+            if(newWindow != -1){
+                if (this.editPhysicsValue)
+                    this.otherPhysicsWindowEnable = newWindow;
+                else
+                    this.objectComponentValuesWindowEnable = newWindow;
+            }
+
+            if ((!this.editPhysicsValue && this.objectComponentValuesWindowEnable == 3) | (this.editPhysicsValue && this.otherPhysicsWindowEnable == 3))
                 GUILayout.Label("Last cast was successfuly!");
-            else if (this.objectComponentValuesWindowEnable == 4)
+            else if ((!this.editPhysicsValue && this.objectComponentValuesWindowEnable == 4) | (this.editPhysicsValue && this.otherPhysicsWindowEnable == 4))
                 GUILayout.Label("Last cast was not successfuly!");
 
             GUILayout.EndVertical();
@@ -1032,6 +1050,12 @@ namespace PandaHexCode.PDebug{
             this.timeInput = GUI.TextField(new Rect(10f, 65f, 70, 18), this.timeInput);
             if (GUI.Button(new Rect(10f, 85f, 70f, 20f), "Change"))
                 Time.timeScale = StringToFloat(this.timeInput);
+            if (GUI.Button(new Rect(85f, 85f, 70f, 20f), "Pause")){
+                if (Time.timeScale == 0)
+                    Time.timeScale = 1;
+                else
+                    Time.timeScale = 0;
+            }
         }
 
         private bool targetCameraWindowEnable = false;
@@ -1124,8 +1148,12 @@ namespace PandaHexCode.PDebug{
 
             if (GUI.Button(new Rect(10f, 70f, 85f, 20f), "Resources"))
                 this.otherResourcesWindowEnable = !this.otherResourcesWindowEnable;
-            if (GUI.Button(new Rect(10f, 100f, 85f, 20f), "Physics"))
-                this.otherPhysicsWindowEnable = !this.otherPhysicsWindowEnable;
+            if (GUI.Button(new Rect(10f, 100f, 85f, 20f), "Physics")){
+                if (this.otherPhysicsWindowEnable > 0)
+                    this.otherPhysicsWindowEnable = 0;
+                else
+                    this.otherPhysicsWindowEnable = 1;
+            }
             if (GUI.Button(new Rect(190f, 100f, 85f, 20f), "Render"))
                 this.otherRenderWindowEnable = !this.otherRenderWindowEnable;
             if (GUI.Button(new Rect(200f, 70f, 85f, 20f), "Custom"))
@@ -1211,48 +1239,50 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
         }
 
-        private bool otherPhysicsWindowEnable = false;
-        private string[] physicsInputs = new string[15];
+        private int otherPhysicsWindowEnable = 0;
         private void PhysicsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
-                this.otherPhysicsWindowEnable = false;
+                this.otherPhysicsWindowEnable = 0;
 
-             if (GUI.Button(new Rect(10f, 90f, 100f, 20f), "Reload")) {
-                if (this.is3D){
-                    this.physicsInputs[0] = Physics.gravity.x.ToString();
-                    this.physicsInputs[1] = Physics.gravity.y.ToString();
-                    this.physicsInputs[2] = Physics.gravity.z.ToString();
-                }else{
-                    this.physicsInputs[0] = Physics2D.gravity.x.ToString();
-                    this.physicsInputs[1] = Physics2D.gravity.y.ToString();
-                    this.physicsInputs[2] = "3D";
-                }
-            }
-            if (GUI.Button(new Rect(112f, 90f, 80f, 20f), "Apply")){
-                if (this.is3D){
-                    Physics.gravity = new Vector3(StringToFloat(this.physicsInputs[0]), Physics.gravity.y, Physics.gravity.z);
-                    Physics.gravity = new Vector3(Physics.gravity.x, StringToFloat(this.physicsInputs[1]), Physics.gravity.z);
-                    Physics.gravity = new Vector3(Physics.gravity.x, Physics.gravity.y,StringToFloat(this.physicsInputs[2]));
-                }else{
-                    Physics2D.gravity = new Vector3(StringToFloat(this.physicsInputs[0]), Physics2D.gravity.y);
-                    Physics2D.gravity = new Vector3(Physics2D.gravity.x, StringToFloat(this.physicsInputs[1]));
-                }
-            }
+            this.scrollPosition[2] = GUILayout.BeginScrollView(this.scrollPosition[2]);
 
-            GUI.Label(new Rect(10f, 30f, 400f, 50f), "Change Physics settings of ProjectSettings (Is3D: " + this.is3D + ")");
-            this.physicsInputs[0] = GUI.TextField(new Rect(10f, 60f, 85f, 20f), "GravityX " + this.physicsInputs[0]).Split(' ')[1];
-            this.physicsInputs[1] = GUI.TextField(new Rect(100f, 60f, 85f, 20f), "GravityY " + this.physicsInputs[1]).Split(' ')[1];
-            this.physicsInputs[2] = GUI.TextField(new Rect(190f, 60f, 85f, 20f), "GravityZ " + this.physicsInputs[2]).Split(' ')[1];
-
+            PropertyInfo[] properties;
             if (this.is3D){
-                if (GUI.Button(new Rect(280f, 60f, 195f, 20f), "Queries Hit Triggers: " + Physics.queriesHitTriggers))
-                    Physics.queriesHitTriggers = !Physics.queriesHitTriggers;
+                properties = typeof(Physics).GetProperties();
+                GUILayout.Label("Physics3D");
             }else{
-                if (GUI.Button(new Rect(290f, 60f, 195f, 20f), "Queries Hit Triggers: " + Physics2D.queriesHitTriggers))
-                    Physics2D.queriesHitTriggers = !Physics2D.queriesHitTriggers;
+                GUILayout.Label("Physics2D");
+                properties = typeof(Physics2D).GetProperties();
             }
+
+            foreach(PropertyInfo prop in properties){
+                try{
+
+                    var value = prop.GetValue(null, null);
+
+                    GUILayout.BeginHorizontal();
+
+                    GUILayout.Label(prop.Name + " - " + value);
+
+                    if (GUILayout.Button("Edit")){
+                        this.targetPropertyInfo = prop;
+                        this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
+                        this.otherPhysicsWindowEnable = 2;
+                        this.isTargetField = false;
+                        this.editPhysicsValue = true;
+                    }
+
+                    GUILayout.EndHorizontal();
+
+                }
+                catch(Exception e){
+                    continue;
+                }
+            }
+
+            GUILayout.EndScrollView();
         }
 
         private bool otherRenderWindowEnable = false;
@@ -1792,7 +1822,7 @@ namespace PandaHexCode.PDebug{
                 transform.Rotate(Vector3.back * 20 * Time.deltaTime);
             if (Input.GetKey(KeyCode.K))
                 transform.Rotate(Vector3.right * 20 * Time.deltaTime);
-            else if (Input.GetKey(KeyCode.J))
+            else if (Input.GetKey(KeyCode.H))
                 transform.Rotate(Vector3.left * 20 * Time.deltaTime);
 
             if (!this.canMove)
