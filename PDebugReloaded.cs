@@ -44,6 +44,7 @@ namespace PandaHexCode.PDebug{
         private PropertyInfo targetPropertyInfo;
         private FieldInfo targetFieldInfo;
         private bool isTargetField = false;
+        private string[] editValueInput = new string[15];
 
         private static AppDomain customCodeAppDomain = null;/*For executing code at runtime*/
 
@@ -573,7 +574,7 @@ namespace PandaHexCode.PDebug{
 
                     if (GUILayout.Button("Edit")){
                         this.targetFieldInfo = field;
-                        this.editValueInput = value.ToString().Replace("(", "").Replace(")", "");
+                        this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
                         this.objectComponentValuesWindowEnable = 2;
                         this.isTargetField = true;
                     }
@@ -601,7 +602,7 @@ namespace PandaHexCode.PDebug{
 
                     if (GUILayout.Button("Edit")){
                         this.targetPropertyInfo = prop;
-                        this.editValueInput = value.ToString().Replace("(", "").Replace(")", "");
+                        this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
                         this.objectComponentValuesWindowEnable = 2;
                         this.isTargetField = false;
                     }
@@ -617,7 +618,6 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
         }
 
-        private string editValueInput = string.Empty;
         private object[] copiedVar = new object[5];
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
@@ -665,13 +665,13 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.EndHorizontal();
 
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[0] = GUILayout.TextField(this.editValueInput[0]);
 
             if(GUILayout.Button("Try to cast")){
                 try{
 
                     if (!this.isTargetField){
-                        object var = TryToCastString(this.editValueInput, this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType());
+                        object var = TryToCastString(this.editValueInput[0], this.targetPropertyInfo.GetValue(this.targetComponent, null).GetType());
                         if (var == null){
                             this.objectComponentValuesWindowEnable = 4;
                             return;
@@ -679,7 +679,7 @@ namespace PandaHexCode.PDebug{
                             this.objectComponentValuesWindowEnable = 3;
                         this.targetPropertyInfo.SetValue(this.targetComponent, var, null);
                     }else{
-                        object var = TryToCastString(this.editValueInput, this.targetFieldInfo.GetValue(this.targetComponent).GetType());
+                        object var = TryToCastString(this.editValueInput[0], this.targetFieldInfo.GetValue(this.targetComponent).GetType());
                         if (var == null){
                             this.objectComponentValuesWindowEnable = 4;
                             return;
@@ -767,7 +767,7 @@ namespace PandaHexCode.PDebug{
                         parms = parms + parm.ParameterType;
                     }
 
-                    this.editValueInput = parms;
+                    this.editValueInput[1] = parms;
                 }
             }
 
@@ -799,12 +799,12 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.Label(this.targetMethod.Name + "(" + parms + ")");
 
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[1] = GUILayout.TextField(this.editValueInput[1]);
 
             if(GUILayout.Button("Try to cast & invoke")){
                 try{
                     int i = 0;
-                    string[] args = this.editValueInput.Split('#');
+                    string[] args = this.editValueInput[1].Split('#');
                     object[] parameters = new object[this.targetMethod.GetParameters().Length];
                     foreach (ParameterInfo p in this.targetMethod.GetParameters()){
                         parameters[i] = TryToCastString(args[i], p.ParameterType);
@@ -986,10 +986,10 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.BeginVertical();
 
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[2] = GUILayout.TextField(this.editValueInput[2]);
 
             if (GUILayout.Button("Try to get"))
-                this.targetObject = GameObject.Find(this.editValueInput);
+                this.targetObject = GameObject.Find(this.editValueInput[2]);
 
             if (GUILayout.Button("Copy GameObject list to clipboard")){
                 GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
@@ -1321,7 +1321,60 @@ namespace PandaHexCode.PDebug{
 
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
-            foreach(Material material in materials){
+            GUILayout.BeginHorizontal();
+
+            this.editValueInput[6] = GUILayout.TextField(this.editValueInput[6]);
+
+            if (GUILayout.Button("Export")){
+
+                if (!Directory.Exists(this.editValueInput[6]))
+                    Directory.CreateDirectory(this.editValueInput[6]);
+
+                foreach(Material mat in materials){
+                    try{
+                        string[] properties = GetMaterialTextureProperties(mat);
+                        foreach (string propName in properties){
+                            Texture tex = mat.GetTexture(propName);
+
+                            if(tex != null)
+                                ExportTextureToPNG(tex, this.editValueInput[6] + "\\" + mat.name + ",__" + propName + ".png");
+                        }
+                    }catch (Exception e){
+                        Debug.LogError("Error by exporting " + mat.name + "!");   
+                    }
+                }
+
+            }
+
+            if (GUILayout.Button("Load")){
+
+                if (!Directory.Exists(this.editValueInput[6]))
+                    return;
+
+                foreach(Material mat in materials){
+                    try{
+
+                        foreach (string fileName in Directory.GetFiles(this.editValueInput[6])){
+                            string file = fileName.Replace(this.editValueInput[6] + "\\", "").Replace(".png", "");
+
+                            string[] args = file.Split(new string[] { ",__" }, StringSplitOptions.None);
+
+                            if (args[0].Equals(mat.name))
+                                mat.SetTexture(args[1], LoadTexture(fileName));
+                            
+                        }
+
+                    }catch(Exception e){
+                        Debug.LogError(e.Message + "|" + e.StackTrace);
+                        continue;
+                    }
+                }
+
+            }
+
+            GUILayout.EndHorizontal();
+
+            foreach (Material material in materials){
                 GUILayout.BeginHorizontal();
 
                 try{
@@ -1354,31 +1407,23 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.BeginHorizontal();
 
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[3] = GUILayout.TextField(this.editValueInput[3]);
             if (GUILayout.Button("Copy")){
                 if (this.onlyUseVarCopy)
-                    this.copiedVar[this.targetCopiedIndex] = LoadTexture(this.editValueInput);
+                    this.copiedVar[this.targetCopiedIndex] = LoadTexture(this.editValueInput[3]);
                 else
-                    this.copiedTexture[this.targetCopiedIndex] = LoadTexture(this.editValueInput);
+                    this.copiedTexture[this.targetCopiedIndex] = LoadTexture(this.editValueInput[3]);
             }
 
             GUILayout.EndHorizontal();
 
-            string[] properties = null;
-
-#if UNITY_2018_1_OR_NEWER
-            properties = this.targetMaterial.GetTexturePropertyNames();
-#else
-            properties = new string[] { "_MainTex", "_BumpMap", "_DetailNormalMap", "_ParallaxMap", "_OcclusionMap", "_EmissionMap", "_DetailMask", "_DetailAlbedoMap", "_MetallicGlossMap"};
-#endif
+            string[] properties = GetMaterialTextureProperties(this.targetMaterial);
 
             foreach (string propName in properties){
-                try
-                {
+                try{
 
                     Texture tex = this.targetMaterial.GetTexture(propName);
-                    if (tex == null)
-                    {
+                    if (tex == null){
                         GUILayout.BeginHorizontal();
 
                         GUILayout.Label(propName + " - No texture");
@@ -1395,8 +1440,7 @@ namespace PandaHexCode.PDebug{
 
                     GUILayout.BeginHorizontal();
 
-                    if (GUILayout.Button("Copy"))
-                    {
+                    if (GUILayout.Button("Copy")){
                         if (this.onlyUseVarCopy)
                             this.copiedVar[this.targetCopiedIndex] = tex;
                         else
@@ -1410,7 +1454,7 @@ namespace PandaHexCode.PDebug{
                         this.targetMaterial.SetTexture(propName, null);
 
                     if (GUILayout.Button("Export"))
-                        ExportTextureToPNG(tex, this.editValueInput);
+                        ExportTextureToPNG(tex, this.editValueInput[3]);
 
                     GUILayout.EndHorizontal();
                 }catch(Exception e){
@@ -1422,17 +1466,25 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.BeginHorizontal();
 
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[4] = GUILayout.TextField(this.editValueInput[4]);
 
             if (GUILayout.Button("Get"))
-                this.editValueInput = ColorToHex(this.targetMaterial.color);
+                this.editValueInput[4] = ColorToHex(this.targetMaterial.color);
 
             if (GUILayout.Button("Set"))
-                this.targetMaterial.color = GetColorFromHex(this.editValueInput);
+                this.targetMaterial.color = GetColorFromHex(this.editValueInput[4]);
 
             GUILayout.EndHorizontal();
 
             GUILayout.EndScrollView();
+        }
+
+        private string[] GetMaterialTextureProperties(Material mat){
+#if UNITY_2018_1_OR_NEWER
+            return mat.GetTexturePropertyNames();
+#else
+            return new string[] { "_MainTex", "_BumpMap", "_DetailNormalMap", "_ParallaxMap", "_OcclusionMap", "_EmissionMap", "_DetailMask", "_DetailAlbedoMap", "_MetallicGlossMap"};
+#endif
         }
 
         public static Texture LoadTexture(string path){
@@ -1491,14 +1543,14 @@ namespace PandaHexCode.PDebug{
 
         private void DrawAppDomainAssembly(AppDomain appDomain){
             GUILayout.BeginHorizontal();
-            this.editValueInput = GUILayout.TextField(this.editValueInput);
+            this.editValueInput[5] = GUILayout.TextField(this.editValueInput[5]);
             if (GUILayout.Button("Load")){
                 if (appDomain != AppDomain.CurrentDomain)
-                    PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(this.editValueInput));
+                    PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(this.editValueInput[5]));
                 else
-                    Assembly.LoadFrom(this.editValueInput);
+                    Assembly.LoadFrom(this.editValueInput[5]);
 
-                this.editValueInput = string.Empty;
+                this.editValueInput[5] = string.Empty;
             }
 
             GUILayout.EndHorizontal();
