@@ -44,7 +44,7 @@ namespace PandaHexCode.PDebug{
         private PropertyInfo targetPropertyInfo;
         private FieldInfo targetFieldInfo;
         private bool isTargetField = false;
-        private string[] editValueInput = new string[15];
+        private string[] editValueInput = new string[15] { "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 
         private static AppDomain customCodeAppDomain = null;/*For executing code at runtime*/
 
