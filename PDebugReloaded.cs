@@ -1373,6 +1373,8 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.BeginHorizontal();
 
+            this.editValueInput[6] = GUILayout.TextField(this.editValueInput[6]);
+
             if (GUILayout.Button("Export")){
 
                 if (!Directory.Exists(this.editValueInput[6]))
