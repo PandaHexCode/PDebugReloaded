@@ -630,18 +630,13 @@ namespace PandaHexCode.PDebug{
             GUILayout.BeginHorizontal();
 
             if (GUILayout.Button("Back")){
-                if (!this.editPhysicsValue)
-                    this.objectComponentValuesWindowEnable = 1;
-                else
-                    this.otherPhysicsWindowEnable = 1;
-
+                SetValueWindowValue(1);
                 return;
             }
 
             object target = null;
             if (!this.editPhysicsValue)
                 target = this.targetComponent;
-            int newWindow = -1;
 
             if (GUILayout.Button("CopyVar")){
                 if(this.isTargetField)
@@ -653,16 +648,17 @@ namespace PandaHexCode.PDebug{
             if (this.copiedVar[this.targetCopiedIndex] != null && GUILayout.Button("PasteVar")){
                 if((!this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetPropertyInfo.GetValue(target, null).GetType())
                     | (this.isTargetField && this.copiedVar[this.targetCopiedIndex].GetType() != this.targetFieldInfo.GetValue(target).GetType())){
-                    newWindow = 4;
+                    SetValueWindowValue(4);
                     return;
+                }else{ 
+
+                    if (this.isTargetField)
+                        this.targetFieldInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex]);
+                    else
+                        this.targetPropertyInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex], null);
+
+                    SetValueWindowValue(3);
                 }
-
-                if (this.isTargetField)
-                    this.targetFieldInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex]);
-                else
-                    this.targetPropertyInfo.SetValue(target, this.copiedVar[this.targetCopiedIndex], null);
-
-                newWindow = 3;
             }
 
             if (GUILayout.Button("SetNull")){
@@ -671,7 +667,7 @@ namespace PandaHexCode.PDebug{
                 else
                     this.targetPropertyInfo.SetValue(target, null, null);
 
-                newWindow = 3;
+                SetValueWindowValue(3);
             }
 
             GUILayout.EndHorizontal();
@@ -684,39 +680,45 @@ namespace PandaHexCode.PDebug{
                     if (!this.isTargetField){
                         object var = TryToCastString(this.editValueInput[0], this.targetPropertyInfo.GetValue(target, null).GetType());
                         if (var == null){
-                            newWindow = 4;
+                            SetValueWindowValue(4);
                             return;
-                        }else
-                            newWindow = 3;
-                        this.targetPropertyInfo.SetValue(target, var, null);
+                        }else{
+                            SetValueWindowValue(3);
+                            this.targetPropertyInfo.SetValue(target, var, null);
+                        }
                     }else{
                         object var = TryToCastString(this.editValueInput[0], this.targetFieldInfo.GetValue(target).GetType());
                         if (var == null){
-                            newWindow = 4;
+                            SetValueWindowValue(4);
                             return;
-                        }else
-                            newWindow = 3;
-                        this.targetFieldInfo.SetValue(target, var);
+                        }else{
+                            SetValueWindowValue(3);
+                            this.targetFieldInfo.SetValue(target, var);
+                        }
                     }
                 
                 }catch (Exception e){
-                    newWindow = 4;
+                    SetValueWindowValue(4);
                 }
             }
 
-            if(newWindow != -1){
-                if (this.editPhysicsValue)
-                    this.otherPhysicsWindowEnable = newWindow;
-                else
-                    this.objectComponentValuesWindowEnable = newWindow;
-            }
+            int window = this.objectComponentValuesWindowEnable;
+            if (this.editPhysicsValue)
+                window = this.otherPhysicsWindowEnable;
 
-            if ((!this.editPhysicsValue && this.objectComponentValuesWindowEnable == 3) | (this.editPhysicsValue && this.otherPhysicsWindowEnable == 3))
+            if (window == 3)
                 GUILayout.Label("Last cast was successfuly!");
-            else if ((!this.editPhysicsValue && this.objectComponentValuesWindowEnable == 4) | (this.editPhysicsValue && this.otherPhysicsWindowEnable == 4))
+            else if (window == 4)
                 GUILayout.Label("Last cast was not successfuly!");
 
             GUILayout.EndVertical();
+        }
+
+        private void SetValueWindowValue(int value){
+            if (this.editPhysicsValue)
+                this.otherPhysicsWindowEnable = value;
+            else
+                this.objectComponentValuesWindowEnable = value;
         }
 
         private int objectComponentMethodesWindowEnable = 0 /*0 = false, 1 = NormalMethodsWindow, 2 = EditMethodsWindow, Good cast = 3, bad cast = 4*/;
