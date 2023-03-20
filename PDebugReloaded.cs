@@ -1352,11 +1352,18 @@ namespace PandaHexCode.PDebug{
             Renderer[] renderers = FindObjectsOfType<Renderer>();
 
             foreach (Renderer renderer in renderers){
+                if (renderer == null)
+                    continue;
+
                 foreach (Material material in renderer.sharedMaterials){
-                    if (!materials.Contains(material) && material != null){
-                        materials.Add(material);
+                    try{
+                        if (material != null && !materials.Contains(material))
+                            materials.Add(material);
+                    }catch(Exception e){
+                        continue;
                     }
                 }
+
             }
 
             List<Material> sortedMaterials = materials.OrderBy(m => m.name).ToList();
@@ -1365,8 +1372,6 @@ namespace PandaHexCode.PDebug{
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
             GUILayout.BeginHorizontal();
-
-            this.editValueInput[6] = GUILayout.TextField(this.editValueInput[6]);
 
             if (GUILayout.Button("Export")){
 
