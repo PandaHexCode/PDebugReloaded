@@ -7,20 +7,11 @@ using System.Threading;
 using System.IO;
 using System.Collections;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using UnityEngine.Tilemaps;
+using UnityEngine.Rendering;
 
 namespace PandaHexCode.PDebug{
-
-    public class Injector{
-        public static void Inject(){
-            new Thread(() =>{
-                Thread.Sleep(5000);
-
-                GameObject someObject = new GameObject();
-                someObject.AddComponent<PDebugReloaded>();
-                UnityEngine.Object.DontDestroyOnLoad(someObject);
-            }).Start();
-        }
-    }
 
     public class PDebugReloaded : MonoBehaviour{
 
@@ -28,17 +19,16 @@ namespace PandaHexCode.PDebug{
 
         private string NAME = "PDebugReloaded";
 
-        private bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
+        [System.NonSerialized]public bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
         
-        public Color backgroundColor = new Color(0f, 0f, 0f, 0.5f);
+        public Color backgroundColor = new Color(63f, 63, 116f, 225f); private GUIStyle transStyle = null;
         private bool logExceptions = false;/*True needs lot more Performance!*/
         private KeyCode shortcutMainKey = KeyCode.F1;
 
-        private enum State { Console = 0, Objects = 1, Time = 2, Scene = 3, Application = 4, Other = 5, Custom = 6};
-        private State currentState = State.Console;
+        private bool[] windowRegionEnabled = new bool[7];
 
         private GameObject targetObject = null;/*Current GameObject in Objects Tab*/
-        private Camera targetCamera = null;/*Camera that calculating the Ray*/
+        [System.NonSerialized]public Camera targetCamera = null;/*Camera that calculating the Ray*/
         private UnityEngine.Component targetComponent = null;
         private MethodInfo targetMethod;
         private PropertyInfo targetPropertyInfo;
@@ -55,8 +45,10 @@ namespace PandaHexCode.PDebug{
 
         private bool showMenu = true;
         private bool viewCursor = true;
+        private bool windowTrans = false;
 
         private Vector2[] scrollPosition = new Vector2[10];/*For the OnGUI windows*/
+        private Rect[] windowRects = new Rect[40];
 
         private void Awake(){
             this.targetCamera = Camera.main;
@@ -78,6 +70,17 @@ namespace PandaHexCode.PDebug{
                 Destroy(this);
 
             Application.logMessageReceived += HandleLog;/*Register Console Log*/
+        }
+
+        private Texture2D MakeStyleTex(int width, int height, Color color){
+            Color[] pix = new Color[width * height];
+            for (int i = 0; i < pix.Length; i++)
+                pix[i] = color;
+
+            Texture2D result = new Texture2D(width, height);
+            result.SetPixels(pix);
+            result.Apply();
+            return result;
         }
 
         private void Update(){/*For TargetGameObject find*/
@@ -115,7 +118,7 @@ namespace PandaHexCode.PDebug{
                     this.targetCopiedIndex = 4;
             }
 
-            if (this.currentState == State.Objects) {
+            if (this.windowRegionEnabled[1]) {
                 if (Input.GetKeyDown(KeyCode.I)) {/*Try to get a TargetObject for the Objects Tab*/
                     if (this.targetCamera == null)
                         this.targetCamera = Camera.main;
@@ -140,8 +143,26 @@ namespace PandaHexCode.PDebug{
             }
         }
 
+        private void DrawWindow(int id, Rect standartRect, GUI.WindowFunction func, string name, int region = -1){
+            if (this.windowRects[id] == Rect.zero)
+                this.windowRects[id] = standartRect;
+            if(this.windowTrans)
+                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name, this.transStyle);
+            else
+                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name);
+        }
+
+        private void DrawCloseButton(int region, int id){
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.windowRegionEnabled[region] = false;
+        }
+
         private void OnGUI(){/*Draw the current window*/
             GUI.backgroundColor = this.backgroundColor;
+            if(this.transStyle == null){
+                this.transStyle = new GUIStyle(GUI.skin.window);
+                this.transStyle.normal.background = MakeStyleTex(1, 1, this.backgroundColor);
+            }
 
             GUI.Label(new Rect(Screen.width - 218, 0, 500, 50), "PDebugReloaded by PandaHexCode");
 
@@ -150,176 +171,166 @@ namespace PandaHexCode.PDebug{
 
             DrawMainButtons();
 
-            switch (this.currentState){
+            if (this.windowRegionEnabled[0])
+                    DrawWindow(0, new Rect(10, 40, 300, 200), ConsoleWindow, "Console", 0);
+            if (this.windowRegionEnabled[1]) {
+                DrawWindow(1, new Rect(10, 40, 380, 160), ObjectsWindow, "GameObjects", 1);
 
-                case State.Console:
-                    GUI.Window(0, new Rect(10, 40, 300, 200), ConsoleWindow, "Console");
-                    break;
+                if (this.objectPosRotScaEditWindowEnable)
+                    DrawWindow(2, new Rect(395, 40, 245, 180), ObjectPosRotScaEditWindow, "Edit");
 
-                case State.Objects:
-                    GUI.Window(0, new Rect(10, 40, 380, 160), ObjectsWindow, "GameObjects");
-                    
-                    if (this.objectPosRotScaEditWindowEnable)
-                        GUI.Window(1, new Rect(395, 40, 245, 180), ObjectPosRotScaEditWindow, "Edit");
-                    
-                    if(this.objectComponentsWindowEnable)
-                        GUI.Window(2, new Rect(10, 205, 380, 140), ObjectComponentsWindow, "Components");
+                float objectComponentsWindowsAndOtherHeight = 140;
+                if (!this.viewEnumValuesWindowEnable)
+                    objectComponentsWindowsAndOtherHeight = 270;
 
-                    if (this.objectComponentValuesWindowEnable != 0){
-                        int xPos = 10;
-                        if (this.objectComponentsWindowEnable)
-                            xPos = 395;
+                if (this.objectComponentsWindowEnable)
+                    DrawWindow(3, new Rect(10, 205, 380, objectComponentsWindowsAndOtherHeight), ObjectComponentsWindow, "Components");
 
-                        if (this.objectComponentValuesWindowEnable == 1)
-                            GUI.Window(5, new Rect(xPos, 205, 380, 140), ObjectComponentValuesWindow, "Values");
-                        else{
-                            string valueName = string.Empty;
-                            if (this.isTargetField)
-                                valueName = this.targetFieldInfo.Name;
-                            else
-                                valueName = this.targetPropertyInfo.Name;
+                if (this.objectComponentValuesWindowEnable != 0){
+                    int xPos = 10;
+                    if (this.objectComponentsWindowEnable)
+                        xPos = 395;
 
-                            GUI.Window(5, new Rect(xPos, 205, 380, 140), EditValueWindow, "EditValue - " + valueName);
-                        }
-                    }else if(this.objectComponentMethodesWindowEnable != 0){
-                        int xPos = 10;
-                        if (this.objectComponentsWindowEnable)
-                            xPos = 395;
-
-                        if (this.objectComponentMethodesWindowEnable == 1)
-                            GUI.Window(5, new Rect(xPos, 205, 380, 140), ObjectComponentMethodesWindow, "Methodes");
+                    if (this.objectComponentValuesWindowEnable == 1)
+                        DrawWindow(4, new Rect(xPos, 205, 380, objectComponentsWindowsAndOtherHeight), ObjectComponentValuesWindow, "Values");
+                    else{
+                        string valueName = string.Empty;
+                        if (this.isTargetField)
+                            valueName = this.targetFieldInfo.Name;
                         else
-                            GUI.Window(5, new Rect(xPos, 205, 380, 140), EditMethodInvokeWindow, "EditInvoke - " + this.targetMethod.Name);
+                            valueName = this.targetPropertyInfo.Name;
+
+                        DrawWindow(5, new Rect(xPos, 205, 380, objectComponentsWindowsAndOtherHeight), EditValueWindow, "EditValue - " + valueName);
                     }
+                }else if (this.objectComponentMethodesWindowEnable != 0){
+                    int xPos = 10;
+                    if (this.objectComponentsWindowEnable)
+                        xPos = 395;
 
-                    if (this.objectChildWindowEnable){
-                        if(!this.objectPosRotScaEditWindowEnable)
-                            GUI.Window(1, new Rect(395, 40, 245, 180), ObjectChildrenWindow, "Children");
-                        else
-                            GUI.Window(3, new Rect(645, 40, 245, 180), ObjectChildrenWindow, "Children");
-                    }
+                    if (this.objectComponentMethodesWindowEnable == 1)
+                        DrawWindow(6, new Rect(xPos, 205, 380, objectComponentsWindowsAndOtherHeight), ObjectComponentMethodesWindow, "Methodes");
+                    else
+                        DrawWindow(7, new Rect(xPos, 205, 380, objectComponentsWindowsAndOtherHeight), EditMethodInvokeWindow, "EditInvoke - " + this.targetMethod.Name);
+                }
 
-                    if (this.targetCameraWindowEnable){
-                        if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
-                            GUI.Window(1, new Rect(395, 40, 245, 180), TargetCameraWindow, "TargetCamera");
-                        else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
-                            GUI.Window(3, new Rect(645, 40, 245, 180), TargetCameraWindow, "TargetCamera");
-                        else
-                            GUI.Window(4, new Rect(895, 40, 245, 180), TargetCameraWindow, "TargetCamera");
-                    }else if (this.objectLayerWindowEnable){
-                        if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
-                            GUI.Window(1, new Rect(395, 40, 245, 180), ObjectLayerWindow, "Layer");
-                        else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
-                            GUI.Window(3, new Rect(645, 40, 245, 180), ObjectLayerWindow, "Layer");
-                        else
-                            GUI.Window(4, new Rect(895, 40, 245, 180), ObjectLayerWindow, "Layer");
-                    }else if (this.objectGetObjectByNameWindowEnable){
-                        if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
-                            GUI.Window(1, new Rect(395, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
-                        else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
-                            GUI.Window(3, new Rect(645, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
-                        else
-                            GUI.Window(4, new Rect(895, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
-                    }
+                if (this.objectChildWindowEnable){
+                    if (!this.objectPosRotScaEditWindowEnable)
+                        DrawWindow(8, new Rect(395, 40, 245, 180), ObjectChildrenWindow, "Children");
+                    else
+                        DrawWindow(9, new Rect(645, 40, 245, 180), ObjectChildrenWindow, "Children");
+                }
 
-                    if (this.viewEnumValuesWindowEnable){
-                        if(this.objectComponentsWindowEnable | this.objectComponentValuesWindowEnable != 0 | this.objectComponentMethodesWindowEnable != 0)
-                            GUI.Window(7, new Rect(10, 350, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
-                        else
-                            GUI.Window(7, new Rect(10, 205, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
-                    }
-                    break;
+                if (this.targetCameraWindowEnable){
+                    if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
+                        DrawWindow(10, new Rect(395, 40, 245, 180), TargetCameraWindow, "TargetCamera");
+                    else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
+                        DrawWindow(11, new Rect(645, 40, 245, 180), TargetCameraWindow, "TargetCamera");
+                    else
+                        DrawWindow(12, new Rect(895, 40, 245, 180), TargetCameraWindow, "TargetCamera");
+                }else if (this.objectLayerWindowEnable){
+                    if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
+                        DrawWindow(13, new Rect(395, 40, 245, 180), ObjectLayerWindow, "Layer");
+                    else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
+                        DrawWindow(14, new Rect(645, 40, 245, 180), ObjectLayerWindow, "Layer");
+                    else
+                        DrawWindow(15, new Rect(895, 40, 245, 180), ObjectLayerWindow, "Layer");
+                }else if (this.objectGetObjectByNameWindowEnable){
+                    if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
+                        DrawWindow(16, new Rect(395, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                    else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
+                        DrawWindow(17, new Rect(645, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                    else
+                        DrawWindow(18, new Rect(895, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                }
 
-                case State.Time:
-                    GUI.Window(0, new Rect(10, 40, 380, 150), TimeWindow, "Time");
-                    break;
-
-                case State.Scene:
-                    GUI.Window(0, new Rect(10, 40, 380, 150), SceneWindow, "Scene");
-                    break;
-
-                case State.Application:
-                    GUI.Window(0, new Rect(10, 40, 380, 160), ApplicationWindow, "Application");
-                    break;
-
-                case State.Other:
-                    GUI.Window(0, new Rect(10, 40, 380, 150), OtherWindow, "Other");
-
-                    if(this.otherResourcesWindowEnable)
-                        GUI.Window(1, new Rect(395, 40, 245, 180), ResourcesWindow, "Resources");
-
-                    if (this.otherPhysicsWindowEnable > 0){
-                        int yW = 280;
-                        if (this.assemblyWindowEnable > 0 | this.materialsWindowEnable > 0)
-                            yW = 140;
-
-                        if(this.otherPhysicsWindowEnable == 1)
-                            GUI.Window(2, new Rect(10, 205, 500, yW), PhysicsWindow, "Physics");
-                        else
-                            GUI.Window(2, new Rect(10, 205, 500, yW), EditValueWindow, this.targetPropertyInfo.Name + " - Edit");
-                    }
-
-                    if (this.otherRenderWindowEnable){
-                        if (this.otherPhysicsWindowEnable > 0)
-                            GUI.Window(5, new Rect(515, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
-                        else
-                            GUI.Window(5, new Rect(10, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
-                    }
-
-                    if (this.assemblyWindowEnable > 0){
-                        int yPos = 205;
-                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
-                            yPos = 350;
-
-                        if(this.assemblyWindowEnable == 1)
-                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyWindow, "Assemblies");
-                        else if(this.assemblyWindowEnable == 2)
-                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyTypesWindow, this.targetAssembly.GetName().Name + " - Types");
-                        else
-                            GUI.Window(7, new Rect(10, yPos, 405, 280), AssemblyTypeInstancesWindow, this.targetType.Name + " - Instances");
-                    }
-
-                    if(this.materialsWindowEnable > 0){
-                        int yPos = 205;
-                        int xPos = 10;
-                        if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
-                            yPos = 350;
-                        if (this.assemblyWindowEnable > 0)
-                            xPos = 420;
-
-                        if(this.materialsWindowEnable == 1)
-                            GUI.Window(8, new Rect(xPos, yPos, 405, 280), MaterialsWindow, "Loaded Materials");
-                        else
-                            GUI.Window(8, new Rect(xPos, yPos, 405, 280), MaterialEditWindow, this.targetMaterial.name + " - Edit");
-                    }
-
-                    break;
-
-                case State.Custom:
-                    GUI.Window(0, new Rect(10, 40, 380, 150), CustomWindow, "Custom");
-                    break;
-
+                if (this.viewEnumValuesWindowEnable){
+                    if (this.objectComponentsWindowEnable | this.objectComponentValuesWindowEnable != 0 | this.objectComponentMethodesWindowEnable != 0)
+                        DrawWindow(19, new Rect(10, 350, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
+                    else
+                        DrawWindow(20, new Rect(10, 205, 245, 180), ViewEnumValuesWindow, "Enum - " + (Type)this.targetEnum);
+                }
             }
+
+            if (this.windowRegionEnabled[2])
+                    DrawWindow(21, new Rect(10, 40, 380, 150), TimeWindow, "Time", 2);
+            if (this.windowRegionEnabled[3])
+                DrawWindow(22, new Rect(10, 40, 380, 150), SceneWindow, "Scene", 3);
+            if (this.windowRegionEnabled[4])
+                DrawWindow(23, new Rect(10, 40, 380, 160), ApplicationWindow, "Application", 4);
+            if (this.windowRegionEnabled[5]){
+                DrawWindow(24, new Rect(10, 40, 380, 150), OtherWindow, "Other", 5);
+
+                if (this.otherResourcesWindowEnable)
+                    DrawWindow(25, new Rect(395, 40, 245, 180), ResourcesWindow, "Resources");
+
+                if (this.otherPhysicsWindowEnable > 0){
+                    int yW = 280;
+                    if (this.assemblyWindowEnable > 0 | this.materialsWindowEnable > 0)
+                        yW = 140;
+
+                    if (this.otherPhysicsWindowEnable == 1)
+                        DrawWindow(26, new Rect(10, 205, 500, yW), PhysicsWindow, "Physics");
+                    else
+                        DrawWindow(27, new Rect(10, 205, 500, yW), EditValueWindow, this.targetPropertyInfo.Name + " - Edit");
+                }
+
+                if (this.otherRenderWindowEnable){
+                    if (this.otherPhysicsWindowEnable > 0)
+                        DrawWindow(28, new Rect(515, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
+                    else
+                        DrawWindow(29, new Rect(10, 205, 430, 140), RenderWindow, "Render\nTargetCamera: " + this.targetCamera.name);
+                }
+
+                if (this.assemblyWindowEnable > 0){
+                    int yPos = 205;
+                    if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
+                        yPos = 350;
+
+                    if (this.assemblyWindowEnable == 1)
+                        DrawWindow(30, new Rect(10, yPos, 405, 280), AssemblyWindow, "Assemblies");
+                    else if (this.assemblyWindowEnable == 2)
+                        DrawWindow(31, new Rect(10, yPos, 405, 280), AssemblyTypesWindow, this.targetAssembly.GetName().Name + " - Types");
+                    else
+                        DrawWindow(32, new Rect(10, yPos, 405, 280), AssemblyTypeInstancesWindow, this.targetType.Name + " - Instances");
+                }
+
+                if (this.materialsWindowEnable > 0){
+                    int yPos = 205;
+                    int xPos = 10;
+                    if (this.otherRenderWindowEnable | this.otherPhysicsWindowEnable > 0)
+                        yPos = 350;
+                    if (this.assemblyWindowEnable > 0)
+                        xPos = 420;
+
+                    if (this.materialsWindowEnable == 1)
+                        DrawWindow(33, new Rect(xPos, yPos, 405, 280), MaterialsWindow, "Loaded Materials");
+                    else
+                        DrawWindow(34, new Rect(xPos, yPos, 405, 280), MaterialEditWindow, this.targetMaterial.name + " - Edit");
+                }
+            }
+
+            if (this.windowRegionEnabled[6])
+                DrawWindow(35, new Rect(10, 40, 380, 150), CustomWindow, "Custom", 6);
         }
 
-        private void DrawMainButtons(){
+        private void DrawMainButtons() {
             if (GUI.Button(new Rect(10f, 10f, 70f, 20f), "Console"))
-                this.currentState = State.Console;
+                this.windowRegionEnabled[0] = !this.windowRegionEnabled[0];
             if (GUI.Button(new Rect(85f, 10f, 70f, 20f), "Objects")){
                 if (this.objectComponentValuesWindowEnable > 0)
                     this.objectComponentValuesWindowEnable = 1;
-                this.currentState = State.Objects;
+                this.windowRegionEnabled[1] = !this.windowRegionEnabled[1];
             }
             if (GUI.Button(new Rect(160f, 10f, 70f, 20f), "Time"))
-                this.currentState = State.Time;
+                this.windowRegionEnabled[2] = !this.windowRegionEnabled[2];
             if (GUI.Button(new Rect(235f, 10f, 70f, 20f), "Scene"))
-                this.currentState = State.Scene;
+                this.windowRegionEnabled[3] = !this.windowRegionEnabled[3];
             if (GUI.Button(new Rect(310f, 10f, 80f, 20f), "Application"))
-                this.currentState = State.Application;
+                this.windowRegionEnabled[4] = !this.windowRegionEnabled[4];
             if (GUI.Button(new Rect(395f, 10f, 70f, 20f), "Other")){
                 if(this.otherPhysicsWindowEnable > 0)
                     this.otherPhysicsWindowEnable = 1;
-                this.currentState = State.Other;
+                this.windowRegionEnabled[5] = !this.windowRegionEnabled[5];
             }
             if (GUI.Button(new Rect(470f, 10f, 100f, 20f), "CopyIndex: " + (this.targetCopiedIndex + 1))){
                 if (this.targetCopiedIndex < 4)
@@ -330,10 +341,14 @@ namespace PandaHexCode.PDebug{
 
             if (GUI.Button(new Rect(575f, 10f, 120f, 20f), this.onlyUseVarCopy ? "OnlyVarCopy: On" : "OnlyVarCopy: Off"))
                 this.onlyUseVarCopy = !this.onlyUseVarCopy;
+
+            this.windowTrans = GUI.Toggle(new Rect(700, 10, 120, 20), this.windowTrans, "Transparent");
         }
 
         private void ConsoleWindow(int windowID) {
             GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(0, 0);
 
             this.scrollPosition[0] = GUILayout.BeginScrollView(this.scrollPosition[0]);
 
@@ -359,11 +374,15 @@ namespace PandaHexCode.PDebug{
             if (GUILayout.Button("Clear", GUILayout.Width(50))){
                 this.logs.Clear();
             }
+
+            GUI.DragWindow();
         }
 
         private GameObject[] copiedGameObject = new GameObject[5];
         private void ObjectsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(1, 1);
 
             if (GUI.Button(new Rect(0f, 0f, 100f, 20f), "Target Camera")){
                 this.targetCameraWindowEnable = !this.targetCameraWindowEnable;
@@ -373,6 +392,7 @@ namespace PandaHexCode.PDebug{
 
             if(this.targetObject == null){
                 GUI.Label(new Rect(10f, 30f, 500f, 100f), "Please click on an GameObject and press \"i\"!");
+                GUI.DragWindow();
                 return;
             }
 
@@ -427,6 +447,8 @@ namespace PandaHexCode.PDebug{
             
             if (GUI.Button(new Rect(250f, 125f, 70f, 20f), "Edit"))
                 this.objectPosRotScaEditWindowEnable = !this.objectPosRotScaEditWindowEnable;
+
+            GUI.DragWindow();
         }
 
         private Vector3 posInput;
@@ -474,6 +496,7 @@ namespace PandaHexCode.PDebug{
             this.rotInput.Set(StringToFloat(GUI.TextField(new Rect(10f, 155f, 70, 18), this.rotInput.x.ToString())), this.rotInput.y, this.rotInput.z);
             this.rotInput.Set(this.rotInput.x, StringToFloat(GUI.TextField(new Rect(85f, 155f, 70, 18), this.rotInput.y.ToString())), this.rotInput.z);
             this.rotInput.Set(this.rotInput.x, this.rotInput.y, StringToFloat(GUI.TextField(new Rect(160f, 155f, 70, 18), this.rotInput.z.ToString())));
+            GUI.DragWindow();
         }
 
         private bool objectComponentsWindowEnable = false;
@@ -543,6 +566,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private int objectComponentValuesWindowEnable = 0 /*0 = false, 1 = NormalValuesWindow, 2 = EditValuesWindow, Good cast = 3, bad cast = 4*/;
@@ -615,6 +639,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private object[] copiedVar = new object[5];
@@ -712,6 +737,7 @@ namespace PandaHexCode.PDebug{
                 GUILayout.Label("Last cast was not successfuly!");
 
             GUILayout.EndVertical();
+            GUI.DragWindow();
         }
 
         private void SetValueWindowValue(int value){
@@ -757,6 +783,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private void InvokeMethod(MethodInfo method, object[] paramets){
@@ -857,14 +884,22 @@ namespace PandaHexCode.PDebug{
 
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
-        public object TryToCastString(string valStr, Type type){
+        public static object TryToCastString(string valStr, Type type){
             object var = null;
 
             if(!type.Equals(typeof(string)) && valStr.StartsWith("!")){
-                var = this.copiedVar[(int)StringToFloat(valStr.Replace("!", "")) - 1];
+                var = PDebugReloaded.instance.copiedVar[(int)StringToFloat(valStr.Replace("!", "")) - 1];
                 return var;
+            }
+
+            if (type.Equals(typeof(UnityEngine.Vector2))
+                | type.Equals(typeof(UnityEngine.Vector3))
+                    | type.Equals(typeof(UnityEngine.Vector4))){
+                valStr = valStr.Replace("(", "").Replace(")", "").Replace(" ", "");
+                Debug.Log(valStr);
             }
 
             if (type.Equals(typeof(int)))
@@ -882,29 +917,42 @@ namespace PandaHexCode.PDebug{
                     var = false;
                 else
                     var = true;
-            }else if (type.Equals(typeof(string)) | type.Equals(typeof(String)))
-                var = (string) valStr;
-             else if (type.Equals(typeof(Int32))){
-                   var = valStr;
-            Int32 output = 0;
+            }
+            else if (type.Equals(typeof(string)) | type.Equals(typeof(String)))
+                var = (string)valStr;
+            else if (type.Equals(typeof(Int32)))
+            {
+                var = valStr;
+                Int32 output = 0;
                 Int32.TryParse(valStr, out output);
                 var = output;
-            }else if (type.Equals(typeof(Int16))){
+            }
+            else if (type.Equals(typeof(Int16)))
+            {
                 Int16 output = 0;
                 Int16.TryParse(valStr, out output);
                 var = output;
-            }else if (type.Equals(typeof(Int64))){
+            }
+            else if (type.Equals(typeof(Int64)))
+            {
                 Int64 output = 0;
                 Int64.TryParse(valStr, out output);
                 var = output;
-            }else if (type.Equals(typeof(Color))){
-                var = (Color32)GetColorFromHex(valStr);
-            }else if (type.Equals(typeof(Color32))){
-                var = (Color32)GetColorFromHex(valStr);
-            }else if (type.IsEnum){
-                if (valStr.Equals("v")){
-                    this.viewEnumValuesWindowEnable = true;
-                    this.targetEnum = type;
+            }
+            else if (type.Equals(typeof(Color)))
+            {
+                var = (Color32)PDebugReloaded.instance.GetColorFromHex(valStr);
+            }
+            else if (type.Equals(typeof(Color32)))
+            {
+                var = (Color32)PDebugReloaded.instance.GetColorFromHex(valStr);
+            }
+            else if (type.IsEnum)
+            {
+                if (valStr.Equals("v"))
+                {
+                    PDebugReloaded.instance.viewEnumValuesWindowEnable = true;
+                    PDebugReloaded.instance.targetEnum = type;
                     return null;
                 }
 
@@ -950,6 +998,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private bool objectChildWindowEnable = false;
@@ -975,6 +1024,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private bool objectLayerWindowEnable = false;
@@ -1002,6 +1052,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private bool objectGetObjectByNameWindowEnable = false;
@@ -1041,11 +1092,14 @@ namespace PandaHexCode.PDebug{
                 this.targetObject = Light.GetLights(LightType.Directional, 0)[0].gameObject;
 
             GUILayout.EndVertical();
+            GUI.DragWindow();
         }
 
         private string timeInput = "1";
         private void TimeWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(2, 21);
 
             GUI.Label(new Rect(10f, 30f, 200f, 50f), "Delta Time: " + Time.deltaTime + "\nTime Scale: " + Time.timeScale);
 
@@ -1058,6 +1112,7 @@ namespace PandaHexCode.PDebug{
                 else
                     Time.timeScale = 0;
             }
+            GUI.DragWindow();
         }
 
         private bool targetCameraWindowEnable = false;
@@ -1094,10 +1149,13 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private void SceneWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(3, 22);
 
             this.scrollPosition[0] = GUILayout.BeginScrollView(this.scrollPosition[0]);
 
@@ -1121,12 +1179,15 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private void ApplicationWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
-            if(GUI.Button(new Rect(10f, 30f, 200f, 15f), "RunInBackground: " + Application.runInBackground))
+            DrawCloseButton(4, 23);
+
+            if (GUI.Button(new Rect(10f, 30f, 200f, 15f), "RunInBackground: " + Application.runInBackground))
                 Application.runInBackground = !Application.runInBackground;
 
             GUI.Label(new Rect(10f, 50f, 500f, 500f), "ProductName: "+ Application.productName + "\nCompanyName: " 
@@ -1136,6 +1197,7 @@ namespace PandaHexCode.PDebug{
 
             if (GUI.Button(new Rect(215f, 30f, 100f, 15f), "Is3D: " + this.is3D))
                 this.is3D = !this.is3D;
+            GUI.DragWindow();
         }
 
         private Light customLight = null;
@@ -1143,6 +1205,8 @@ namespace PandaHexCode.PDebug{
         private FreeCamController freeCam;
         private void OtherWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(5, 24);
 
             float fps = (int)(1f / Time.unscaledDeltaTime);
 
@@ -1164,7 +1228,7 @@ namespace PandaHexCode.PDebug{
             }
 
             if (GUI.Button(new Rect(200f, 70f, 85f, 20f), "Custom"))
-                this.currentState = State.Custom;
+                this.windowRegionEnabled[6] = !this.windowRegionEnabled[6];
             if (GUI.Button(new Rect(10f, 125f, 85f, 20f), "Assemblies")){
                 if (this.assemblyWindowEnable > 0)
                     this.assemblyWindowEnable = 0;
@@ -1217,6 +1281,7 @@ namespace PandaHexCode.PDebug{
                 this.freeCam.gameObject.SetActive(true);
             }
 
+            GUI.DragWindow();
         }
 
         private bool otherResourcesWindowEnable = false;
@@ -1246,6 +1311,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private int otherPhysicsWindowEnable = 0;
@@ -1292,6 +1358,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private bool otherRenderWindowEnable = false;
@@ -1313,8 +1380,10 @@ namespace PandaHexCode.PDebug{
                 this.targetCamera.GetComponent<RenderCameraMod>().drawCollision = !this.targetCamera.GetComponent<RenderCameraMod>().drawCollision;
             }
 
-            this.drawCollToggles[0] = GUI.Toggle(new Rect(190, 70, 50, 20), this.drawCollToggles[0], "Mesh");
-            this.drawCollToggles[1] = GUI.Toggle(new Rect(240, 70, 55, 20), this.drawCollToggles[1], "Other");
+            if (this.is3D){
+                this.drawCollToggles[0] = GUI.Toggle(new Rect(190, 70, 50, 20), this.drawCollToggles[0], "Mesh");
+                this.drawCollToggles[1] = GUI.Toggle(new Rect(240, 70, 55, 20), this.drawCollToggles[1], "Other");
+            }
             this.drawCollToggles[2] = GUI.Toggle(new Rect(300, 70, 60, 20), this.drawCollToggles[2], "Trigger");
             this.drawCollToggles[3] = GUI.Toggle(new Rect(360, 70, 60, 20), this.drawCollToggles[3], "!Trigger");
 
@@ -1337,37 +1406,42 @@ namespace PandaHexCode.PDebug{
                         break;
                 }
             }
+            GUI.DragWindow();
         }
 
         private int materialsWindowEnable = 0;
         private Material targetMaterial;
+        private List<Material> materials = null;
         private void MaterialsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
                 this.materialsWindowEnable = 0;
 
-            List<Material> materials = new List<Material>();
+            if (this.materials == null | GUILayout.Button("Reload")){
+                this.materials = new List<Material>();
 
-            Renderer[] renderers = FindObjectsOfType<Renderer>();
+                Renderer[] renderers = FindObjectsOfType<Renderer>();
 
-            foreach (Renderer renderer in renderers){
-                if (renderer == null)
-                    continue;
-
-                foreach (Material material in renderer.sharedMaterials){
-                    try{
-                        if (material != null && !materials.Contains(material))
-                            materials.Add(material);
-                    }catch(Exception e){
+                /*Try to add every material from every current renderer from the scene*/
+                foreach (Renderer renderer in renderers){
+                    if (renderer == null)
                         continue;
+
+                    foreach (Material material in renderer.sharedMaterials){
+                        try{
+                            if (material != null && !this.materials.Contains(material))
+                                this.materials.Add(material);
+                        }catch (Exception e){
+                            continue;
+                        }
                     }
                 }
 
-            }
+                renderers = null;
 
-            List<Material> sortedMaterials = materials.OrderBy(m => m.name).ToList();
-            materials = sortedMaterials;
+                this.materials = this.materials.OrderBy(m => m.name).ToList();
+            }
 
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
@@ -1379,16 +1453,21 @@ namespace PandaHexCode.PDebug{
 
                 if (!Directory.Exists(this.editValueInput[6]))
                     Directory.CreateDirectory(this.editValueInput[6]);
-
-                foreach(Material mat in materials){
+              
+                foreach(Material mat in this.materials){
                     try{
                         string[] properties = GetMaterialTextureProperties(mat);
+
                         foreach (string propName in properties){
                             Texture tex = mat.GetTexture(propName);
 
                             if(tex != null)
                                 ExportTextureToPNG(tex, this.editValueInput[6] + "\\" + mat.name + ",__" + propName + ".png");
+
+                            tex = null;
                         }
+
+                        properties = null;
                     }catch (Exception e){
                         Debug.LogError("Error by exporting " + mat.name + "!");   
                     }
@@ -1398,10 +1477,12 @@ namespace PandaHexCode.PDebug{
 
             if (GUILayout.Button("Load")){
 
+                GC.Collect();
+
                 if (!Directory.Exists(this.editValueInput[6]))
                     return;
 
-                foreach(Material mat in materials){
+                foreach(Material mat in this.materials){
                     try{
 
                         foreach (string fileName in Directory.GetFiles(this.editValueInput[6])){
@@ -1409,9 +1490,14 @@ namespace PandaHexCode.PDebug{
 
                             string[] args = file.Split(new string[] { ",__" }, StringSplitOptions.None);
 
+                            Texture tex = LoadTexture(fileName);
+
                             if (args[0].Equals(mat.name))
-                                mat.SetTexture(args[1], LoadTexture(fileName));
-                            
+                                mat.SetTexture(args[1], tex);
+
+                            GC.Collect();
+                            args = null;
+                            file = null;
                         }
 
                     }catch(Exception e){
@@ -1420,11 +1506,13 @@ namespace PandaHexCode.PDebug{
                     }
                 }
 
+                GC.Collect();
+
             }
 
             GUILayout.EndHorizontal();
 
-            foreach (Material material in materials){
+            foreach (Material material in this.materials){
                 GUILayout.BeginHorizontal();
 
                 try{
@@ -1442,6 +1530,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private Texture[] copiedTexture = new Texture[5];
@@ -1466,6 +1555,8 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndHorizontal();
+
+            GUILayout.Label("Shader: " + this.targetMaterial.shader.name);
 
             string[] properties = GetMaterialTextureProperties(this.targetMaterial);
 
@@ -1527,6 +1618,7 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndHorizontal();
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private string[] GetMaterialTextureProperties(Material mat){
@@ -1589,6 +1681,7 @@ namespace PandaHexCode.PDebug{
             }
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private void DrawAppDomainAssembly(AppDomain appDomain){
@@ -1610,6 +1703,7 @@ namespace PandaHexCode.PDebug{
 
                 GUILayout.Label(assembly.GetName().Name);
                 if (GUILayout.Button("Types")){
+                    this.typeList = null;
                     this.targetAssembly = assembly;
                     this.assemblyWindowEnable = 2;
                 }
@@ -1646,6 +1740,8 @@ namespace PandaHexCode.PDebug{
 #endif
         }
 
+
+        private List<Type> typeList = null;
         private void AssemblyTypesWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -1657,7 +1753,14 @@ namespace PandaHexCode.PDebug{
             if (GUILayout.Button("Back"))
                 this.assemblyWindowEnable = 1;
 
-            foreach (Type type in this.targetAssembly.GetTypes()){
+            if (this.typeList == null){
+                this.typeList = new List<Type>();
+                this.typeList.AddRange(this.targetAssembly.GetTypes());
+                this.typeList = this.typeList.OrderBy(m => m.Name).ToList();
+            }
+
+            int i = 0;
+            foreach (Type type in this.typeList){
                 GUILayout.BeginHorizontal();
 
                 GUILayout.Label(type.Name);
@@ -1676,12 +1779,15 @@ namespace PandaHexCode.PDebug{
                 if (GUILayout.Button("CreateInstance")){
                     this.targetAssembly.CreateInstance(type.Name);
                 }
-        
 
                 GUILayout.EndHorizontal();
+                i++;
             }
 
+            i = 0;
+
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private Type targetType = null;
@@ -1708,6 +1814,7 @@ namespace PandaHexCode.PDebug{
 
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private List<string> customCodeAssemblies = new List<string>();
@@ -1773,18 +1880,21 @@ namespace PandaHexCode.PDebug{
         private void CustomWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
+            DrawCloseButton(6, 35);
+
             this.scrollPosition[0] = GUILayout.BeginScrollView(this.scrollPosition[0]);
 
             GUILayout.BeginVertical();
 
-            if (GUILayout.Button("Back"))
-                this.currentState = State.Other;
-
+            if (GUILayout.Button("GC.Collect()"))
+                GC.Collect();
+            
             /*This window is for buttons, for specific game functions*/
 
             GUILayout.EndVertical();
 
             GUILayout.EndScrollView();
+            GUI.DragWindow();
         }
 
         private void CheckTargetCameraMod(){
@@ -1870,12 +1980,13 @@ namespace PandaHexCode.PDebug{
         public bool drawCollision = false;
 
         private Material material;
+        private LineRenderer lineRenderer;
 
         private void Awake(){
             Shader standardShader = Shader.Find("Standard");
-
             this.material = new Material(standardShader);
             this.material.SetColor("Albedo", Color.red);
+            lineRenderer = gameObject.AddComponent<LineRenderer>();
         }
 
         private void OnPreRender(){
@@ -1886,77 +1997,232 @@ namespace PandaHexCode.PDebug{
             if (!this.drawCollision)
                 return;
 
-            //Made with AI, because i'm bad at math
-            GL.PushMatrix();
-            material.SetPass(0);
-            GL.LoadProjectionMatrix(Camera.current.projectionMatrix);
-            GL.modelview = Camera.current.worldToCameraMatrix;
+            if (PDebugReloaded.instance.is3D){
+                //Made with AI, because i'm bad at math
+                GL.PushMatrix();
+                material.SetPass(0);
+                GL.LoadProjectionMatrix(Camera.current.projectionMatrix);
+                GL.modelview = Camera.current.worldToCameraMatrix;
 
-            GL.Begin(GL.LINES);
-            GL.Color(Color.red);
+                GL.Begin(GL.LINES);
+                GL.Color(Color.red);
 
-            bool extraCheck = !PDebugReloaded.instance.drawCollToggles[0] | !PDebugReloaded.instance.drawCollToggles[1] | !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
+                bool extraCheck = !PDebugReloaded.instance.drawCollToggles[0] | !PDebugReloaded.instance.drawCollToggles[1] | !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
 
-            foreach (Collider collider in FindObjectsOfType<Collider>()){
-                if (extraCheck){
-                    if (!PDebugReloaded.instance.drawCollToggles[0] && collider is MeshCollider)
+                foreach (Collider collider in FindObjectsOfType<Collider>())
+                {
+                    if (!collider.enabled)
                         continue;
-                    else if (!PDebugReloaded.instance.drawCollToggles[1] &&
-                        (!(collider is BoxCollider) && !(collider is SphereCollider) && !(collider is MeshCollider) && !(collider is CapsuleCollider)))
+                    if (extraCheck)
+                    {
+                        if (!PDebugReloaded.instance.drawCollToggles[0] && collider is MeshCollider)
+                            continue;
+                        else if (!PDebugReloaded.instance.drawCollToggles[1] &&
+                            (!(collider is BoxCollider) && !(collider is SphereCollider) && !(collider is MeshCollider) && !(collider is CapsuleCollider)))
+                            continue;
+                        else if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
+                            continue;
+                        else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
+                            continue;
+                    }
+
+                    Bounds bounds = collider.bounds;
+                    Vector3 min = bounds.min;
+                    Vector3 max = bounds.max;
+
+                    // Bottom lines
+                    GL.Vertex(new Vector3(min.x, min.y, min.z));
+                    GL.Vertex(new Vector3(max.x, min.y, min.z));
+
+                    GL.Vertex(new Vector3(max.x, min.y, min.z));
+                    GL.Vertex(new Vector3(max.x, min.y, max.z));
+
+                    GL.Vertex(new Vector3(max.x, min.y, max.z));
+                    GL.Vertex(new Vector3(min.x, min.y, max.z));
+
+                    GL.Vertex(new Vector3(min.x, min.y, max.z));
+                    GL.Vertex(new Vector3(min.x, min.y, min.z));
+
+                    // Top lines
+                    GL.Vertex(new Vector3(min.x, max.y, min.z));
+                    GL.Vertex(new Vector3(max.x, max.y, min.z));
+
+                    GL.Vertex(new Vector3(max.x, max.y, min.z));
+                    GL.Vertex(new Vector3(max.x, max.y, max.z));
+
+                    GL.Vertex(new Vector3(max.x, max.y, max.z));
+                    GL.Vertex(new Vector3(min.x, max.y, max.z));
+
+                    GL.Vertex(new Vector3(min.x, max.y, max.z));
+                    GL.Vertex(new Vector3(min.x, max.y, min.z));
+
+                    // Side lines
+                    GL.Vertex(new Vector3(min.x, min.y, min.z));
+                    GL.Vertex(new Vector3(min.x, max.y, min.z));
+
+                    GL.Vertex(new Vector3(max.x, min.y, min.z));
+                    GL.Vertex(new Vector3(max.x, max.y, min.z));
+
+                    GL.Vertex(new Vector3(max.x, min.y, max.z));
+                    GL.Vertex(new Vector3(max.x, max.y, max.z));
+
+                    GL.Vertex(new Vector3(min.x, min.y, max.z));
+                    GL.Vertex(new Vector3(min.x, max.y, max.z));
+                }
+                GL.End();
+                GL.PopMatrix();
+            }else{/*Also AI Code*/
+                GL.PushMatrix();
+                material.SetPass(0);
+                GL.LoadOrtho();
+
+                GL.Begin(GL.LINES);
+
+                bool extraCheck = !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
+                var colliders = FindObjectsOfType<Collider2D>();
+                foreach (var collider in colliders)
+                {
+                    if (!collider.enabled)
                         continue;
-                    else if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
-                        continue;
-                    else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
-                        continue;
+
+                    if(collider.isTrigger)
+                        GL.Color(Color.green);
+                    else
+                        GL.Color(Color.red);
+                  
+                    if (extraCheck){
+                        if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
+                            continue;
+                        else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
+                            continue;
+                    }
+                    if (collider is BoxCollider2D boxCollider)
+                    {
+                        DrawBoxCollider2D(boxCollider);
+                    }
+                    else if (collider is CircleCollider2D sphereCollider)
+                    {
+                        DrawSphereCollider2D(sphereCollider);
+                    }
+                    else if (collider is CapsuleCollider2D capsuleCollider)
+                    {
+                        DrawCapsuleCollider2D(capsuleCollider);
+                    }
+                    else if (collider is TilemapCollider2D tilemapCollider)
+                    {
+                        DrawTilemapCollider2D(tilemapCollider);
+                    }
+                    else if (collider is EdgeCollider2D edgeCollider)
+                    {
+                        DrawEdgeCollider2D(edgeCollider);
+                    }
                 }
 
-                Bounds bounds = collider.bounds;
-                Vector3 min = bounds.min;
-                Vector3 max = bounds.max;
-
-                // Bottom lines
-                GL.Vertex(new Vector3(min.x, min.y, min.z));
-                GL.Vertex(new Vector3(max.x, min.y, min.z));
-
-                GL.Vertex(new Vector3(max.x, min.y, min.z));
-                GL.Vertex(new Vector3(max.x, min.y, max.z));
-
-                GL.Vertex(new Vector3(max.x, min.y, max.z));
-                GL.Vertex(new Vector3(min.x, min.y, max.z));
-
-                GL.Vertex(new Vector3(min.x, min.y, max.z));
-                GL.Vertex(new Vector3(min.x, min.y, min.z));
-
-                // Top lines
-                GL.Vertex(new Vector3(min.x, max.y, min.z));
-                GL.Vertex(new Vector3(max.x, max.y, min.z));
-
-                GL.Vertex(new Vector3(max.x, max.y, min.z));
-                GL.Vertex(new Vector3(max.x, max.y, max.z));
-
-                GL.Vertex(new Vector3(max.x, max.y, max.z));
-                GL.Vertex(new Vector3(min.x, max.y, max.z));
-
-                GL.Vertex(new Vector3(min.x, max.y, max.z));
-                GL.Vertex(new Vector3(min.x, max.y, min.z));
-
-                // Side lines
-                GL.Vertex(new Vector3(min.x, min.y, min.z));
-                GL.Vertex(new Vector3(min.x, max.y, min.z));
-
-                GL.Vertex(new Vector3(max.x, min.y, min.z));
-                GL.Vertex(new Vector3(max.x, max.y, min.z));
-
-                GL.Vertex(new Vector3(max.x, min.y, max.z));
-                GL.Vertex(new Vector3(max.x, max.y, max.z));
-
-                GL.Vertex(new Vector3(min.x, min.y, max.z));
-                GL.Vertex(new Vector3(min.x, max.y, max.z));
+                GL.End();
+                GL.PopMatrix();
             }
-            GL.End();
-            GL.PopMatrix();
         }
 
+        void DrawBoxCollider2D(BoxCollider2D collider)
+        {
+            var center = collider.bounds.center;
+            var size = collider.size;
+            var halfSize = size * 0.5f;
+            var min = center - (Vector3)halfSize;
+            var max = center + (Vector3)halfSize;
+
+            // Zeichne die Box Collider-Kanten
+            DrawRect(min, max);
+        }
+
+        void DrawSphereCollider2D(CircleCollider2D collider)
+        {
+            var center = collider.bounds.center;
+            var radius = collider.radius;
+
+            // Zeichne die Kanten des Sphere Colliders
+            DrawCircle(center, radius);
+        }
+
+        void DrawCapsuleCollider2D(CapsuleCollider2D collider)
+        {
+            var center = collider.bounds.center;
+            var size = collider.size;
+            var radius = collider.size.x * 0.5f;
+            var height = collider.size.y - collider.size.x;
+
+            // Zeichne die Kanten des Capsule Colliders
+            DrawCapsule(center, radius, height);
+        }
+
+        void DrawTilemapCollider2D(TilemapCollider2D collider)
+        {
+            var bounds = collider.bounds;
+
+            // Zeichne die Kanten des Tilemap Colliders
+            DrawRect(bounds.min, bounds.max);
+        }
+
+        void DrawEdgeCollider2D(EdgeCollider2D collider)
+        {
+            var points = collider.points;
+            var startPoint = collider.bounds.min;
+
+            // Zeichne die Kanten des Edge Colliders
+            for (int i = 0; i < points.Length - 1; i++)
+            {
+                var point1 = startPoint + (Vector3)points[i];
+                var point2 = startPoint + (Vector3)points[i + 1];
+                GL.Vertex3(point1.x, point1.y, 0);
+                GL.Vertex3(point2.x, point2.y, 0);
+            }
+        }
+
+        // Zeichne ein Rechteck (Box) mit den angegebenen Eckpunkten
+        void DrawRect(Vector2 min, Vector2 max)
+        {
+            GL.Vertex3(min.x, min.y, 0);
+            GL.Vertex3(max.x, min.y, 0);
+
+            GL.Vertex3(max.x, min.y, 0);
+            GL.Vertex3(max.x, max.y, 0);
+
+            GL.Vertex3(max.x, max.y, 0);
+            GL.Vertex3(min.x, max.y, 0);
+
+            GL.Vertex3(min.x, max.y, 0);
+            GL.Vertex3(min.x, min.y, 0);
+        }
+
+        // Zeichne einen Kreis (Sphere) mit dem angegebenen Mittelpunkt und Radius
+        void DrawCircle(Vector2 center, float radius)
+        {
+            const int segments = 32;
+            float anglePerSegment = (Mathf.PI * 2f) / segments;
+
+            for (int i = 0; i < segments; i++)
+            {
+                var angle = i * anglePerSegment;
+                var startPoint = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                var endPoint = center + new Vector2(Mathf.Cos(angle + anglePerSegment), Mathf.Sin(angle + anglePerSegment)) * radius;
+
+                GL.Vertex3(startPoint.x, startPoint.y, 0);
+                GL.Vertex3(endPoint.x, endPoint.y, 0);
+            }
+        }
+
+        // Zeichne eine Kapsel (Capsule) mit dem angegebenen Mittelpunkt, Radius und Höhe
+        void DrawCapsule(Vector2 center, float radius, float height)
+        {
+            var halfHeight = height * 0.5f;
+            var top = center + Vector2.up * halfHeight;
+            var bottom = center + Vector2.down * halfHeight;
+
+            // Zeichne die Kanten der Kapsel
+            DrawCircle(top, radius);
+            DrawCircle(bottom, radius);
+            DrawRect(top - new Vector2(radius, 0), bottom + new Vector2(radius, 0));
+        }
 
     }
 
