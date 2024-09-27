@@ -15,43 +15,58 @@ namespace PandaHexCode.PDebug{
 
     public class PDebugReloaded : MonoBehaviour{
 
+        public bool isMonoMod = true; /*If a game is mono or IL2CPP*/
+
+        #region Values only for Mono games (Not IL2CPP)
         public static PDebugReloaded instance = null;
+        #endregion
 
         private string NAME = "PDebugReloaded";
 
-        [System.NonSerialized]public bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
-        
-        public Color backgroundColor = new Color(63f, 63, 116f, 225f); private GUIStyle transStyle = null;
-        private bool logExceptions = false;/*True needs lot more Performance!*/
-        private KeyCode shortcutMainKey = KeyCode.F1;
+        #region Settings values
+        public bool is3D = true;/*This Script uses a other Ray for 3D Games!*/
+        private bool logExceptions = false;/*True needs lot more Performance sometimes!*/
 
+        private KeyCode shortcutMainKey = KeyCode.F1;
+        private bool onlyUseVarCopy = false /*If true, it always use CopiedVar for copy button*/;
+        private bool viewCursor = true;
+        #endregion
+
+        #region Window render values
+        private bool showMenu = true;
+        private bool windowTrans = false;
+
+        public Color backgroundColor = new Color(63f, 63, 116f, 225f); 
+        private GUIStyle transStyle = null;
         private bool[] windowRegionEnabled = new bool[7];
 
+        private string[] editValueInput = new string[15] { "", "", "", "", "", "", "", "", "", "", "", "", "", "", "" };
+
+        private Vector2[] scrollPosition = new Vector2[11];/*For the OnGUI windows*/
+        private Rect[] windowRects = new Rect[40];
+        #endregion
+
+        #region Target values
         private GameObject targetObject = null;/*Current GameObject in Objects Tab*/
-        [System.NonSerialized]public Camera targetCamera = null;/*Camera that calculating the Ray*/
+        [System.NonSerialized] public Camera targetCamera = null;/*Camera that calculating the Ray*/
         private UnityEngine.Component targetComponent = null;
         private MethodInfo targetMethod;
         private PropertyInfo targetPropertyInfo;
         private FieldInfo targetFieldInfo;
         private bool isTargetField = false;
-        private string[] editValueInput = new string[15] { "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
+        private int targetCopiedIndex = 0;
+        #endregion
 
         private static AppDomain customCodeAppDomain = null;/*For executing code at runtime*/
 
-        private int targetCopiedIndex = 0;
-        private bool onlyUseVarCopy = false /*If true, it always use CopiedVar for copy button*/;
-
         private List<LogEntry> logs = new List<LogEntry>();/*For the console window*/
-
-        private bool showMenu = true;
-        private bool viewCursor = true;
-        private bool windowTrans = false;
-
-        private Vector2[] scrollPosition = new Vector2[10];/*For the OnGUI windows*/
-        private Rect[] windowRects = new Rect[40];
 
         private void Awake(){
             this.targetCamera = Camera.main;
+            Application.logMessageReceived += HandleLog;/*Register Console Log*/
+
+            if (!this.isMonoMod)
+                return;
 
             /*Check if an instance allready exits and if exits destroy this, else create a new gameobject with the instance*/
             if (PDebugReloaded.instance == null){
@@ -67,97 +82,11 @@ namespace PandaHexCode.PDebug{
                     Destroy(this);
                 }
             }else if (PDebugReloaded.instance != this)
-                Destroy(this);
-
-            Application.logMessageReceived += HandleLog;/*Register Console Log*/
+                Destroy(this);       
         }
 
-        private Texture2D MakeStyleTex(int width, int height, Color color){
-            Color[] pix = new Color[width * height];
-            for (int i = 0; i < pix.Length; i++)
-                pix[i] = color;
-
-            Texture2D result = new Texture2D(width, height);
-            result.SetPixels(pix);
-            result.Apply();
-            return result;
-        }
-
-        private void Update(){/*For TargetGameObject find*/
-            if (this.viewCursor){
-                Cursor.visible = true;
-                Cursor.lockState = CursorLockMode.None;
-            }else{
-                Cursor.visible = false;
-                Cursor.lockState = CursorLockMode.Locked;
-            }
-
-            if (Input.GetKey(this.shortcutMainKey)){
-                if (Input.GetKeyDown(KeyCode.C))
-                    this.viewCursor = !this.viewCursor;
-
-                if (Input.GetKeyDown(KeyCode.M))
-                    this.showMenu = !this.showMenu;
-
-                if (Input.GetKeyDown(KeyCode.P)){
-                    if (Time.timeScale == 0)
-                        Time.timeScale = 1;
-                    else
-                        Time.timeScale = 0;
-                }
-
-                if (Input.GetKeyDown("1"))
-                    this.targetCopiedIndex = 0;
-                else if (Input.GetKeyDown("2"))
-                    this.targetCopiedIndex = 1;
-                else if (Input.GetKeyDown("3"))
-                    this.targetCopiedIndex = 2;
-                else if (Input.GetKeyDown("4"))
-                    this.targetCopiedIndex = 3;
-                else if (Input.GetKeyDown("5"))
-                    this.targetCopiedIndex = 4;
-            }
-
-            if (this.windowRegionEnabled[1]) {
-                if (Input.GetKeyDown(KeyCode.I)) {/*Try to get a TargetObject for the Objects Tab*/
-                    if (this.targetCamera == null)
-                        this.targetCamera = Camera.main;
-
-                    Ray ray = this.targetCamera.ScreenPointToRay(Input.mousePosition);
-                    if (!this.is3D) {/*2D*/
-                        RaycastHit2D hit = Physics2D.GetRayIntersection(ray, Mathf.Infinity);
-                        if (hit.collider != null)
-                            this.targetObject = hit.collider.gameObject;
-                    }else {/*3D*/
-                        RaycastHit hit;
-                        bool old = Physics.queriesHitTriggers;
-                        Physics.queriesHitTriggers = false;
-                        if (Physics.Raycast(ray, out hit)) {
-                            if (hit.collider != null)
-                                this.targetObject = hit.collider.gameObject;
-                        }
-
-                        Physics.queriesHitTriggers = old;
-                    }
-                }
-            }
-        }
-
-        private void DrawWindow(int id, Rect standartRect, GUI.WindowFunction func, string name, int region = -1){
-            if (this.windowRects[id] == Rect.zero)
-                this.windowRects[id] = standartRect;
-            if(this.windowTrans)
-                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name, this.transStyle);
-            else
-                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name);
-        }
-
-        private void DrawCloseButton(int region, int id){
-            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
-                this.windowRegionEnabled[region] = false;
-        }
-
-        private void OnGUI(){/*Draw the current window*/
+        #region Window render main methods
+         private void OnGUI(){/*Draw the current window*/
             GUI.backgroundColor = this.backgroundColor;
             if(this.transStyle == null){
                 this.transStyle = new GUIStyle(GUI.skin.window);
@@ -236,11 +165,11 @@ namespace PandaHexCode.PDebug{
                         DrawWindow(15, new Rect(895, 40, 245, 180), ObjectLayerWindow, "Layer");
                 }else if (this.objectGetObjectByNameWindowEnable){
                     if (!this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable)
-                        DrawWindow(16, new Rect(395, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                        DrawWindow(16, new Rect(395, 40, 345, 280), ObjectGetObjectByNameWindow, "FindObject");
                     else if ((this.objectPosRotScaEditWindowEnable && !this.objectChildWindowEnable) | (this.objectChildWindowEnable && !this.objectPosRotScaEditWindowEnable))
-                        DrawWindow(17, new Rect(645, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                        DrawWindow(17, new Rect(645, 40, 345, 280), ObjectGetObjectByNameWindow, "FindObject");
                     else
-                        DrawWindow(18, new Rect(895, 40, 245, 180), ObjectGetObjectByNameWindow, "FindObject");
+                        DrawWindow(18, new Rect(895, 40, 345, 280), ObjectGetObjectByNameWindow, "FindObject");
                 }
 
                 if (this.viewEnumValuesWindowEnable){
@@ -313,9 +242,100 @@ namespace PandaHexCode.PDebug{
                 DrawWindow(35, new Rect(10, 40, 380, 150), CustomWindow, "Custom", 6);
         }
 
-        private void DrawMainButtons() {
+        private void DrawWindow(int id, Rect standartRect, GUI.WindowFunction func, string name, int region = -1){
+            if (this.windowRects[id] == Rect.zero)
+                this.windowRects[id] = standartRect;
+            if (this.windowTrans)
+                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name, this.transStyle);
+            else
+                this.windowRects[id] = GUI.Window(id, this.windowRects[id], func, name);
+        }
+
+        private void DrawCloseButton(int region, int id){
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.windowRegionEnabled[region] = false;
+        }
+
+        private Texture2D MakeStyleTex(int width, int height, Color color){
+            Color[] pix = new Color[width * height];
+            for (int i = 0; i < pix.Length; i++)
+                pix[i] = color;
+
+            Texture2D result = new Texture2D(width, height);
+            result.SetPixels(pix);
+            result.Apply();
+            return result;
+        }
+
+        #endregion
+
+        private void Update(){/*For TargetGameObject find*/
+            if (this.viewCursor){
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+            }else{
+                Cursor.visible = false;
+                Cursor.lockState = CursorLockMode.Locked;
+            }
+
+            if (this.freeCam != null)
+                this.freeCam.Update();
+
+            if (Input.GetKey(this.shortcutMainKey)){
+                if (Input.GetKeyDown(KeyCode.C))
+                    this.viewCursor = !this.viewCursor;
+
+                if (Input.GetKeyDown(KeyCode.M))
+                    this.showMenu = !this.showMenu;
+
+                if (Input.GetKeyDown(KeyCode.P)){
+                    if (Time.timeScale == 0)
+                        Time.timeScale = 1;
+                    else
+                        Time.timeScale = 0;
+                }
+
+                if (Input.GetKeyDown("1"))
+                    this.targetCopiedIndex = 0;
+                else if (Input.GetKeyDown("2"))
+                    this.targetCopiedIndex = 1;
+                else if (Input.GetKeyDown("3"))
+                    this.targetCopiedIndex = 2;
+                else if (Input.GetKeyDown("4"))
+                    this.targetCopiedIndex = 3;
+                else if (Input.GetKeyDown("5"))
+                    this.targetCopiedIndex = 4;
+            }
+
+            if (this.windowRegionEnabled[1]) {
+                if (Input.GetKeyDown(KeyCode.I)) {/*Try to get a TargetObject for the Objects Tab*/
+                    if (this.targetCamera == null)
+                        this.targetCamera = Camera.main;
+
+                    Ray ray = this.targetCamera.ScreenPointToRay(Input.mousePosition);
+                    if (!this.is3D) {/*2D*/
+                        RaycastHit2D hit = Physics2D.GetRayIntersection(ray, Mathf.Infinity);
+                        if (hit.collider != null)
+                            this.targetObject = hit.collider.gameObject;
+                    }else {/*3D*/
+                        RaycastHit hit;
+                        bool old = Physics.queriesHitTriggers;
+                        Physics.queriesHitTriggers = false;
+                        if (Physics.Raycast(ray, out hit)) {
+                            if (hit.collider != null)
+                                this.targetObject = hit.collider.gameObject;
+                        }
+
+                        Physics.queriesHitTriggers = old;
+                    }
+                }
+            }
+        }
+
+        private void DrawMainButtons(){
             if (GUI.Button(new Rect(10f, 10f, 70f, 20f), "Console"))
                 this.windowRegionEnabled[0] = !this.windowRegionEnabled[0];
+
             if (GUI.Button(new Rect(85f, 10f, 70f, 20f), "Objects")){
                 if (this.objectComponentValuesWindowEnable > 0)
                     this.objectComponentValuesWindowEnable = 1;
@@ -323,10 +343,13 @@ namespace PandaHexCode.PDebug{
             }
             if (GUI.Button(new Rect(160f, 10f, 70f, 20f), "Time"))
                 this.windowRegionEnabled[2] = !this.windowRegionEnabled[2];
+
             if (GUI.Button(new Rect(235f, 10f, 70f, 20f), "Scene"))
                 this.windowRegionEnabled[3] = !this.windowRegionEnabled[3];
+
             if (GUI.Button(new Rect(310f, 10f, 80f, 20f), "Application"))
                 this.windowRegionEnabled[4] = !this.windowRegionEnabled[4];
+
             if (GUI.Button(new Rect(395f, 10f, 70f, 20f), "Other")){
                 if(this.otherPhysicsWindowEnable > 0)
                     this.otherPhysicsWindowEnable = 1;
@@ -345,7 +368,7 @@ namespace PandaHexCode.PDebug{
             this.windowTrans = GUI.Toggle(new Rect(700, 10, 120, 20), this.windowTrans, "Transparent");
         }
 
-        private void ConsoleWindow(int windowID) {
+        private void ConsoleWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
             DrawCloseButton(0, 0);
@@ -378,6 +401,7 @@ namespace PandaHexCode.PDebug{
             GUI.DragWindow();
         }
 
+        #region ObjetWindow
         private GameObject[] copiedGameObject = new GameObject[5];
         private void ObjectsWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
@@ -887,6 +911,43 @@ namespace PandaHexCode.PDebug{
             GUI.DragWindow();
         }
 
+        private bool targetCameraWindowEnable = false;
+        private void TargetCameraWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
+                this.targetCameraWindowEnable = false;
+
+            this.scrollPosition[3] = GUILayout.BeginScrollView(this.scrollPosition[3]);
+
+            foreach(Camera cam in Camera.allCameras){
+                GUILayout.BeginHorizontal();
+
+                if(cam.tag.Equals("MainCamera"))
+                    GUILayout.Label(cam.name + " (main)");
+                else
+                    GUILayout.Label(cam.name);
+
+                if (GUILayout.Button("Choose")){
+                    this.targetCamera = cam;
+                    this.targetObject = this.targetCamera.gameObject;
+                }
+
+                if(GUILayout.Button("Set Main")){
+                    Camera old = Camera.main;
+                    old.enabled = false;
+                    old.tag = "Untagged";
+                    cam.tag = "MainCamera";
+                    old.enabled = true;
+                }
+
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+            GUI.DragWindow();
+        }
+
         public static object TryToCastString(string valStr, Type type){
             object var = null;
 
@@ -1055,19 +1116,17 @@ namespace PandaHexCode.PDebug{
             GUI.DragWindow();
         }
 
+        #region Find window
         private bool objectGetObjectByNameWindowEnable = false;
+        private List<GameObject> allObjects = new List<GameObject>();
+        private Dictionary<GameObject, bool> expandedStates;
+        private string searchQuery = "";
+
         private void ObjectGetObjectByNameWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
                 this.objectGetObjectByNameWindowEnable = false;
-
-            GUILayout.BeginVertical();
-
-            this.editValueInput[2] = GUILayout.TextField(this.editValueInput[2]);
-
-            if (GUILayout.Button("Try to get"))
-                this.targetObject = GameObject.Find(this.editValueInput[2]);
 
             if (GUILayout.Button("Copy GameObject list to clipboard")){
                 GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
@@ -1088,12 +1147,72 @@ namespace PandaHexCode.PDebug{
                 GUIUtility.systemCopyBuffer = outputString;
             }
 
-            if (GUILayout.Button("Get first Directional Light"))
+            /*if (GUILayout.Button("Get first Directional Light"))
                 this.targetObject = Light.GetLights(LightType.Directional, 0)[0].gameObject;
+            */
 
-            GUILayout.EndVertical();
+            if (GUILayout.Button("Refresh")){
+                this.allObjects = new List<GameObject>(FindObjectsOfType<GameObject>());
+                this.expandedStates = new Dictionary<GameObject, bool>();
+            }
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Search:");
+            this.searchQuery = GUILayout.TextField(this.searchQuery);
+            GUILayout.EndHorizontal();
+
+            this.scrollPosition[9] = GUILayout.BeginScrollView(this.scrollPosition[9]);
+
+            foreach (GameObject obj in this.allObjects){
+                if (obj == null)
+                    return;
+
+                if (string.IsNullOrEmpty(searchQuery) || obj.name.ToLower().Contains(this.searchQuery.ToLower())){
+                    DrawObject(obj);
+                }
+            }
+
+            GUILayout.EndScrollView();
+
             GUI.DragWindow();
         }
+
+        private void DrawObject(GameObject obj){
+            if (obj.transform.parent == null){
+                if (!this.expandedStates.ContainsKey(obj))
+                    this.expandedStates[obj] = false;
+                bool isExpanded = expandedStates[obj];
+                DrawChildObjects(obj, ref isExpanded);
+                this.expandedStates[obj] = isExpanded;
+            }
+        }
+
+        private void DrawChildObjects(GameObject parent, ref bool isExpanded, string add = ""){
+            GUILayout.BeginHorizontal();
+
+            GUILayout.Label(add + parent.name);
+
+            if (parent.transform.childCount > 0 && GUILayout.Button(isExpanded ? "-" : "+")){
+                isExpanded = !isExpanded;
+            }
+
+            if (GUILayout.Button("Get"))
+                this.targetObject = parent;
+
+            GUILayout.EndHorizontal();
+
+            if (isExpanded){
+                foreach (Transform child in parent.transform){
+                    if (!this.expandedStates.ContainsKey(child.gameObject))
+                        this.expandedStates[child.gameObject] = false;
+                    bool childIsExpanded = this.expandedStates[child.gameObject];
+                    DrawChildObjects(child.gameObject, ref childIsExpanded, "-" + add);
+                    this.expandedStates[child.gameObject] = childIsExpanded;
+                }
+            }
+        }
+        #endregion
+        #endregion
 
         private string timeInput = "1";
         private void TimeWindow(int windowID){
@@ -1112,43 +1231,6 @@ namespace PandaHexCode.PDebug{
                 else
                     Time.timeScale = 0;
             }
-            GUI.DragWindow();
-        }
-
-        private bool targetCameraWindowEnable = false;
-        private void TargetCameraWindow(int windowID){
-            GUI.backgroundColor = this.backgroundColor;
-
-            if (GUI.Button(new Rect(0, 0, 10, 10), ""))
-                this.targetCameraWindowEnable = false;
-
-            this.scrollPosition[3] = GUILayout.BeginScrollView(this.scrollPosition[3]);
-
-            foreach(Camera cam in Camera.allCameras){
-                GUILayout.BeginHorizontal();
-
-                if(cam.tag.Equals("MainCamera"))
-                    GUILayout.Label(cam.name + " (main)");
-                else
-                    GUILayout.Label(cam.name);
-
-                if (GUILayout.Button("Choose")){
-                    this.targetCamera = cam;
-                    this.targetObject = this.targetCamera.gameObject;
-                }
-
-                if(GUILayout.Button("Set Main")){
-                    Camera old = Camera.main;
-                    old.enabled = false;
-                    old.tag = "Untagged";
-                    cam.tag = "MainCamera";
-                    old.enabled = true;
-                }
-
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.EndScrollView();
             GUI.DragWindow();
         }
 
@@ -1200,6 +1282,7 @@ namespace PandaHexCode.PDebug{
             GUI.DragWindow();
         }
 
+        #region Other Window
         private Light customLight = null;
         private GameObject oldCamera;
         private FreeCamController freeCam;
@@ -1255,8 +1338,9 @@ namespace PandaHexCode.PDebug{
             }
 
             if (GUI.Button(new Rect(100f, 70f, 95f, 20f), this.freeCam == null ? "FreeCam: Off" : "FreeCam: On")){
-                if (this.freeCam != null){
-                    Destroy(this.freeCam.gameObject);
+                if (this.freeCam != null){  
+                    Destroy(this.freeCam.transform.gameObject);
+                    this.freeCam = null;
                     this.oldCamera.gameObject.SetActive(true);
                     this.targetObject = this.oldCamera;
                     if (this.targetCamera == null)
@@ -1273,12 +1357,13 @@ namespace PandaHexCode.PDebug{
                 this.oldCamera = this.targetCamera.gameObject;
                 clon.transform.position = this.oldCamera.transform.position;
                 this.oldCamera.SetActive(false);
-                this.freeCam = clon.AddComponent<FreeCamController>();
+                this.freeCam = new FreeCamController();
+                this.freeCam.transform = clon.transform;
                 this.targetCamera = clon.GetComponent<Camera>();
                 this.targetCamera.Render();
                 this.targetObject = this.targetCamera.gameObject;
                 clon.name = "FreeCam";
-                this.freeCam.gameObject.SetActive(true);
+                clon.SetActive(true);
             }
 
             GUI.DragWindow();
@@ -1817,64 +1902,8 @@ namespace PandaHexCode.PDebug{
             GUI.DragWindow();
         }
 
-        private List<string> customCodeAssemblies = new List<string>();
-        private void TryToExecuteCode(string code){
-            /*var assemblyName = "MyDynamicAssembly";
-            var outputAssemblyName = $"{assemblyName}.dll";
-            var outputAssemblyPath = Path.Combine(Environment.CurrentDirectory, outputAssemblyName);
-
-            UnloadAndAddCustomCodeAppDomain(true, outputAssemblyName);
-
-            if (File.Exists(outputAssemblyPath)){
-                try{
-                    File.Delete(outputAssemblyPath);
-                }catch(Exception e){
-                    assemblyName = "MyDynamicAssembly" + UnityEngine.Random.Range(0.1f, 1000.1f);
-                    outputAssemblyName = $"{assemblyName}.dll";
-                }
-            }
-
-            outputAssemblyPath = Path.Combine(Environment.CurrentDirectory, outputAssemblyName);
-            this.customCodeAssemblies.Add(outputAssemblyPath);
-
-            // Compile the code
-            var provider = new Microsoft.CSharp.CSharpCodeProvider();
-            var parameters = new System.CodeDom.Compiler.CompilerParameters();
-            parameters.GenerateExecutable = false;
-            parameters.GenerateInMemory = true;
-            parameters.OutputAssembly = outputAssemblyName;
-
-            Debug.Log(typeof(UnityEngine.Object).Assembly.Location);
-
-            foreach(Assembly assembly1 in AppDomain.CurrentDomain.GetAssemblies())
-                parameters.ReferencedAssemblies.Add(assembly1.Location);
-
-            Debug.Log("2");
-            var results = provider.CompileAssemblyFromSource(parameters, code);
-            Debug.Log("1");
-            if (results.Errors.HasErrors){
-                foreach (System.CodeDom.Compiler.CompilerError error in results.Errors){
-                    Debug.LogError("!" + error.ErrorText);
-                }
-                return;
-            }
-
-            var assembly = PDebugReloaded.customCodeAppDomain.Load(AssemblyName.GetAssemblyName(outputAssemblyName));
-            var type = assembly.GetType("MyClass");
-            var method = type.GetMethod("MyMethod");
-            method.Invoke(null, null);*/
-        }
-
         private void OnApplicationQuit(){
-            UnloadAndAddCustomCodeAppDomain();
-            foreach (string str in this.customCodeAssemblies){
-                try{
-                    if (File.Exists(str))
-                        File.Delete(str);
-                }catch (Exception e){
-
-                }
-            }
+            UnloadAndAddCustomCodeAppDomain();  
         }
 
         private void CustomWindow(int windowID){
@@ -1901,6 +1930,7 @@ namespace PandaHexCode.PDebug{
             if (this.targetCamera.gameObject.GetComponent<RenderCameraMod>() == null)
                 this.targetCamera.gameObject.AddComponent<RenderCameraMod>();
         }
+        #endregion
 
         private void HandleLog(string logString, string stackTrace, UnityEngine.LogType type){
             this.logs.Add(new LogEntry(logString, stackTrace, type));
@@ -1927,7 +1957,11 @@ namespace PandaHexCode.PDebug{
 
     }
 
-    public class FreeCamController : MonoBehaviour{
+    public class FreeCamController{
+
+        public static bool useUnscaledDeltaTime = true;
+
+        public Transform transform;
 
         public float moveSpeed = 8;
         public float fastMoveSpeed = 25;
@@ -1935,18 +1969,22 @@ namespace PandaHexCode.PDebug{
 
         private bool canMove = true;
 
-        private void Update(){
+        public void Update(){
+            float deltaTime = Time.deltaTime;
+            if (FreeCamController.useUnscaledDeltaTime)
+                deltaTime = Time.unscaledDeltaTime;
+
             if (Input.GetKeyDown(KeyCode.E))
                 this.canMove = !this.canMove;
 
             if (Input.GetKey(KeyCode.U))
-                transform.Rotate(Vector3.forward * 20 * Time.deltaTime);
+                this.transform.Rotate(Vector3.forward * 20 * deltaTime);
             else if (Input.GetKey(KeyCode.J))
-                transform.Rotate(Vector3.back * 20 * Time.deltaTime);
+                this.transform.Rotate(Vector3.back * 20 * deltaTime);
             if (Input.GetKey(KeyCode.K))
-                transform.Rotate(Vector3.right * 20 * Time.deltaTime);
+                this.transform.Rotate(Vector3.right * 20 * deltaTime);
             else if (Input.GetKey(KeyCode.H))
-                transform.Rotate(Vector3.left * 20 * Time.deltaTime);
+                this.transform.Rotate(Vector3.left * 20 * deltaTime);
 
             if (!this.canMove)
                 return;
@@ -1956,20 +1994,20 @@ namespace PandaHexCode.PDebug{
                 speed = this.fastMoveSpeed;
 
             if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
-                transform.position = transform.position + (-transform.right * speed * Time.unscaledDeltaTime);
+                this.transform.position = this.transform.position + (-this.transform.right * speed * deltaTime);
 
             if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
-                transform.position = transform.position + (transform.right * speed * Time.unscaledDeltaTime);
+                this.transform.position = this.transform.position + (this.transform.right * speed * deltaTime);
 
             if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
-                transform.position = transform.position + (transform.forward * speed * Time.unscaledDeltaTime);
+                this.transform.position = this.transform.position + (this.transform.forward * speed * deltaTime);
 
             if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
-                transform.position = transform.position + (-transform.forward * speed * Time.unscaledDeltaTime);
+                this.transform.position = this.transform.position + (-this.transform.forward * speed * deltaTime);
 
-            float newRotationX = transform.localEulerAngles.y + Input.GetAxisRaw("Mouse X") * sensitivity;
-            float newRotationY = transform.localEulerAngles.x - Input.GetAxisRaw("Mouse Y") * sensitivity;
-            transform.localEulerAngles = new Vector3(newRotationY, newRotationX, 0f);
+            float newRotationX = this.transform.localEulerAngles.y + Input.GetAxisRaw("Mouse X") * sensitivity;
+            float newRotationY = this.transform.localEulerAngles.x - Input.GetAxisRaw("Mouse Y") * sensitivity;
+            this.transform.localEulerAngles = new Vector3(newRotationY, newRotationX, 0f);
         }
 
     }
@@ -2225,6 +2263,5 @@ namespace PandaHexCode.PDebug{
         }
 
     }
-
 
 }
