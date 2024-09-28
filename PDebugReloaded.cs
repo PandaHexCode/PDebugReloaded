@@ -609,8 +609,10 @@ namespace PandaHexCode.PDebug{
             if (this.targetComponent == null)
                 return;
 
-            this.scrollPosition[4] = GUILayout.BeginScrollView(this.scrollPosition[4]);
+            GUILayout.Label("Search:");
+            this.searchQueryValues = GUILayout.TextField(this.searchQueryValues);
 
+            this.scrollPosition[4] = GUILayout.BeginScrollView(this.scrollPosition[4]);
 
             foreach(FieldInfo field in this.targetComponent.GetType().GetFields(BindingFlags.Static | BindingFlags.Default | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly | BindingFlags.ExactBinding | BindingFlags.GetField | BindingFlags.SetProperty | BindingFlags.GetProperty | BindingFlags.SetField | BindingFlags.SetProperty)){
                 try{
@@ -619,19 +621,21 @@ namespace PandaHexCode.PDebug{
 
                     var value = field.GetValue(this.targetComponent);
 
-                    GUILayout.BeginHorizontal();
+                    if (string.IsNullOrEmpty(this.searchQueryValues) || field.Name.ToLower().Contains(this.searchQueryValues.ToLower())){
+                        GUILayout.BeginHorizontal();
 
-                    GUILayout.Label(field.Name + " - " + value);
+                        GUILayout.Label(field.Name + " - " + value);
 
-                    if (GUILayout.Button("Edit")){
-                        this.targetFieldInfo = field;
-                        this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
-                        this.objectComponentValuesWindowEnable = 2;
-                        this.isTargetField = true;
-                        this.editPhysicsValue = false;
+                        if (GUILayout.Button("Edit")){
+                            this.targetFieldInfo = field;
+                            this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
+                            this.objectComponentValuesWindowEnable = 2;
+                            this.isTargetField = true;
+                            this.editPhysicsValue = false;
+                        }
+
+                        GUILayout.EndHorizontal();
                     }
-
-                    GUILayout.EndHorizontal();
                 }catch (Exception e){
                     if (this.logExceptions)
                         Debug.Log(e.Message + "|" + e.StackTrace);
@@ -648,19 +652,23 @@ namespace PandaHexCode.PDebug{
 
                     var value = prop.GetValue(this.targetComponent, null);
 
-                    GUILayout.BeginHorizontal();
+                    if (string.IsNullOrEmpty(this.searchQueryValues) || prop.Name.ToLower().Contains(this.searchQueryValues.ToLower())){
 
-                    GUILayout.Label(prop.Name + " - " + value);
+                        GUILayout.BeginHorizontal();
 
-                    if (GUILayout.Button("Edit")){
-                        this.targetPropertyInfo = prop;
-                        this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
-                        this.objectComponentValuesWindowEnable = 2;
-                        this.isTargetField = false;
-                        this.editPhysicsValue = false;
+                        GUILayout.Label(prop.Name + " - " + value);
+
+                        if (GUILayout.Button("Edit")){
+                            this.targetPropertyInfo = prop;
+                            this.editValueInput[0] = value.ToString().Replace("(", "").Replace(")", "");
+                            this.objectComponentValuesWindowEnable = 2;
+                            this.isTargetField = false;
+                            this.editPhysicsValue = false;
+                        }
+
+                        GUILayout.EndHorizontal();
                     }
 
-                    GUILayout.EndHorizontal();
                 }catch (Exception e){
                     if (this.logExceptions)
                         Debug.Log(e.Message + "|" + e.StackTrace);
@@ -674,6 +682,7 @@ namespace PandaHexCode.PDebug{
 
         private object[] copiedVar = new object[5];
         private bool editPhysicsValue = false;
+        private string searchQueryValues = "";
         private void EditValueWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
 
@@ -777,6 +786,7 @@ namespace PandaHexCode.PDebug{
                 this.objectComponentValuesWindowEnable = value;
         }
 
+        private string searchQueryMethods = "";
         private int objectComponentMethodesWindowEnable = 0 /*0 = false, 1 = NormalMethodsWindow, 2 = EditMethodsWindow, Good cast = 3, bad cast = 4*/;
         private void ObjectComponentMethodesWindow(int windowID){
             GUI.backgroundColor = this.backgroundColor;
@@ -787,12 +797,16 @@ namespace PandaHexCode.PDebug{
             if (GUI.Button(new Rect(0, 0, 10, 10), ""))
                 this.objectComponentMethodesWindowEnable = 0;
 
+            GUILayout.Label("Search:");
+            this.searchQueryMethods = GUILayout.TextField(this.searchQueryMethods);
+
             this.scrollPosition[5] = GUILayout.BeginScrollView(this.scrollPosition[5]);
 
             foreach(MethodInfo method in this.targetComponent.GetType().GetMethods(
                 BindingFlags.Static | BindingFlags.Default | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly | BindingFlags.ExactBinding | BindingFlags.GetField | BindingFlags.SetProperty | BindingFlags.GetProperty | BindingFlags.SetField | BindingFlags.SetProperty)){
                 try {
-                    MethodDraw(method);
+                    if (string.IsNullOrEmpty(this.searchQueryMethods) || method.Name.ToLower().Contains(this.searchQueryMethods.ToLower()))
+                        MethodDraw(method);
                 }catch(Exception e){
                     if (this.logExceptions)
                         Debug.Log(e.Message + "|" + e.StackTrace);
@@ -804,7 +818,8 @@ namespace PandaHexCode.PDebug{
 
             foreach (MethodInfo method in this.targetComponent.GetType().GetMethods()){
                 try{
-                    MethodDraw(method);
+                    if (string.IsNullOrEmpty(this.searchQueryMethods) || method.Name.ToLower().Contains(this.searchQueryMethods.ToLower()))
+                        MethodDraw(method);
                 }catch (Exception e){
                     if (this.logExceptions)
                         Debug.Log(e.Message + "|" + e.StackTrace);
