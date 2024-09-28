@@ -1345,6 +1345,9 @@ namespace PandaHexCode.PDebug{
                 }
             }
 
+            if (this.freeCam != null && this.freeCam.transform == null)
+                this.freeCam = null;
+
             if (GUI.Button(new Rect(100f, 70f, 95f, 20f), this.freeCam == null ? "FreeCam: Off" : "FreeCam: On")){
                 if (this.freeCam != null){  
                     Destroy(this.freeCam.transform.gameObject);
