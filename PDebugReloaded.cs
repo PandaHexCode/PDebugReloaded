@@ -1998,6 +1998,8 @@ namespace PandaHexCode.PDebug{
                 this.scrollPosition[0] = GUILayout.BeginScrollView(this.scrollPosition[0]);
 
                 foreach(GameObject gm in this.changedObjects){
+                    if(gm == null)
+                        continue;
                     GUILayout.BeginHorizontal();
 
                     GUILayout.Label(gm.name);
