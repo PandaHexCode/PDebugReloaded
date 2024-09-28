@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEngine.Tilemaps;
 using UnityEngine.Rendering;
+using Microsoft.Win32;
 
 namespace PandaHexCode.PDebug{
 
@@ -240,6 +241,9 @@ namespace PandaHexCode.PDebug{
 
             if (this.windowRegionEnabled[6])
                 DrawWindow(35, new Rect(10, 40, 380, 150), CustomWindow, "Custom", 6);
+
+            if (this.experimentWindowEnabled)
+                DrawWindow(36, new Rect(10, 40, 280, 350), ExperimentWindow, "Experiment", 6);
         }
 
         private void DrawWindow(int id, Rect standartRect, GUI.WindowFunction func, string name, int region = -1){
@@ -1304,7 +1308,7 @@ namespace PandaHexCode.PDebug{
                     this.otherPhysicsWindowEnable = 1;
             }
 
-            if (GUI.Button(new Rect(190f, 100f, 85f, 20f), "Render")){
+            if (GUI.Button(new Rect(200f, 100f, 85f, 20f), "Render")){
                 if (this.targetCamera == null)
                     this.targetCamera = Camera.main;
                 this.otherRenderWindowEnable = !this.otherRenderWindowEnable;
@@ -1319,15 +1323,17 @@ namespace PandaHexCode.PDebug{
                     this.assemblyWindowEnable = 1;
             }
 
-            if (GUI.Button(new Rect(100f, 125f, 85f, 20f), "Materials")){
+            if (GUI.Button(new Rect(100f, 125f, 95f, 20f), "Materials")){
                 if (this.materialsWindowEnable > 0)
                     this.materialsWindowEnable = 0;
                 else
                     this.materialsWindowEnable = 1;
             }
 
+            if (GUI.Button(new Rect(200f, 125f, 85f, 20f), "Experiment"))
+                this.experimentWindowEnabled = !this.experimentWindowEnabled;
 
-            if (GUI.Button(new Rect(100f, 100f, 85f, 20f), this.customLight == null ?  "CLight: Off" : "CLight: On")){
+            if (GUI.Button(new Rect(100f, 100f, 95f, 20f), this.customLight == null ?  "CLight: Off" : "CLight: On")){
                 if (this.customLight != null)
                     Destroy(this.customLight.gameObject);
                 else{
@@ -1925,6 +1931,87 @@ namespace PandaHexCode.PDebug{
             GUILayout.EndScrollView();
             GUI.DragWindow();
         }
+
+        #region Experiment
+        private bool experimentWindowEnabled = false;
+        private List<ObjectSave> objectSaves = new List<ObjectSave>();
+        private List<GameObject> changedObjects = new List<GameObject>();
+
+        private class ObjectSave{
+            public int instanceId;
+            public GameObject gm;
+            public Vector3 pos;
+            public Vector3 scale;
+            public Quaternion rot;
+
+            public ObjectSave(int id, GameObject gm, Vector3 pos, Vector3 scale, Quaternion rot){
+                this.instanceId = id;
+                this.gm = gm;
+                this.pos = pos;
+                this.scale = scale;
+                this.rot = rot;
+            }
+        }
+
+        private void ExperimentWindow(int windowID){
+            GUI.backgroundColor = this.backgroundColor;
+
+            DrawCloseButton(6, 36);
+
+            if (GUILayout.Button("Save objects data")){
+                List<GameObject> gms = new List<GameObject>(FindObjectsOfType<GameObject>());
+
+                this.objectSaves.Clear();
+
+                foreach(GameObject gm in gms)
+                    this.objectSaves.Add(new ObjectSave(gm.GetInstanceID(), gm, gm.transform.position, gm.transform.localScale, gm.transform.rotation));
+            }
+
+            if(GUILayout.Button("Load objects data")){
+                List<GameObject> gms = new List<GameObject>(FindObjectsOfType<GameObject>());
+
+                this.changedObjects.Clear();
+
+                foreach (ObjectSave save in this.objectSaves){
+                    if (save.gm == null)
+                        continue;
+
+                    foreach(GameObject gm in gms){
+                        if(gm.GetInstanceID() == save.instanceId){
+                            if (gm.transform.position != save.pos || gm.transform.localScale != save.scale || gm.transform.rotation != save.rot)
+                                this.changedObjects.Add(gm);
+
+                            gm.transform.position = save.pos;
+                            gm.transform.localScale = save.scale;
+                            gm.transform.rotation = save.rot;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if(this.changedObjects.Count > 0){
+                GUILayout.Label("Changed objects:");
+
+                this.scrollPosition[0] = GUILayout.BeginScrollView(this.scrollPosition[0]);
+
+                foreach(GameObject gm in this.changedObjects){
+                    GUILayout.BeginHorizontal();
+
+                    GUILayout.Label(gm.name);
+                    if (GUILayout.Button("Get"))
+                        this.targetObject = gm;
+
+                    GUILayout.EndHorizontal();
+                }
+
+                GUILayout.EndScrollView();
+            }
+
+            GUI.DragWindow();
+        }
+
+        #endregion
 
         private void CheckTargetCameraMod(){
             if (this.targetCamera.gameObject.GetComponent<RenderCameraMod>() == null)
