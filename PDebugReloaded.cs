@@ -107,7 +107,7 @@ namespace PandaHexCode.PDebug{
                 DrawWindow(1, new Rect(10, 40, 380, 160), ObjectsWindow, "GameObjects", 1);
 
                 if (this.objectPosRotScaEditWindowEnable)
-                    DrawWindow(2, new Rect(395, 40, 245, 180), ObjectPosRotScaEditWindow, "Edit");
+                    DrawWindow(2, new Rect(395, 40, 275, 180), ObjectPosRotScaEditWindow, "Edit");
 
                 float objectComponentsWindowsAndOtherHeight = 140;
                 if (!this.viewEnumValuesWindowEnable)
@@ -498,6 +498,8 @@ namespace PandaHexCode.PDebug{
                 this.posInput = this.targetObject.transform.position;
             if (GUI.Button(new Rect(130f, 33f, 60f, 15f), "Set"))
                 this.targetObject.transform.position = this.posInput;
+            if (GUI.Button(new Rect(200f, 33f, 60f, 15f), "Add"))
+                this.targetObject.transform.Translate(this.posInput.x * Time.timeScale, this.posInput.y * Time.timeScale, this.posInput.z * Time.timeScale);
 
             this.posInput.Set(StringToFloat(GUI.TextField(new Rect(10f, 55f, 70, 18), this.posInput.x.ToString())), this.posInput.y, this.posInput.z);
             this.posInput.Set(this.posInput.x, StringToFloat(GUI.TextField(new Rect(85f, 55f, 70, 18), this.posInput.y.ToString())), this.posInput.z);
@@ -1169,7 +1171,7 @@ namespace PandaHexCode.PDebug{
 
             foreach (GameObject obj in this.allObjects){
                 if (obj == null)
-                    return;
+                    continue;
 
                 if (string.IsNullOrEmpty(searchQuery) || obj.name.ToLower().Contains(this.searchQuery.ToLower())){
                     DrawObject(obj);
