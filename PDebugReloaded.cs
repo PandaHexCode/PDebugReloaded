@@ -2121,256 +2121,356 @@ namespace PandaHexCode.PDebug{
 
     }
 
-    public class RenderCameraMod : MonoBehaviour{
 
-        public bool wireframe = false;
+public class RenderCameraMod : MonoBehaviour
+    {
         public bool drawCollision = false;
 
-        private Material material;
-        private LineRenderer lineRenderer;
+        public Color collisionColor = Color.green;
+        public Color triggerColor = Color.yellow;
+        public float lineWidth = 0.02f;
+        public bool wireframe = false;
+        private List<GameObject> runtimeLines = new List<GameObject>();
+        private Material lineMat;
 
-        private void Awake(){
-            Shader standardShader = Shader.Find("Standard");
-            this.material = new Material(standardShader);
-            this.material.SetColor("Albedo", Color.red);
-            lineRenderer = gameObject.AddComponent<LineRenderer>();
+        void Awake()
+        {
+            lineMat = new Material(Shader.Find("Sprites/Default"));
         }
 
-        private void OnPreRender(){
+        private void OnPreRender()
+        {
             GL.wireframe = this.wireframe;
         }
 
-        private void OnPostRender(){
-            if (!this.drawCollision)
-                return;
-
-            if (PDebugReloaded.instance.is3D){
-                //Made with AI, because i'm bad at math
-                GL.PushMatrix();
-                material.SetPass(0);
-                GL.LoadProjectionMatrix(Camera.current.projectionMatrix);
-                GL.modelview = Camera.current.worldToCameraMatrix;
-
-                GL.Begin(GL.LINES);
-                GL.Color(Color.red);
-
-                bool extraCheck = !PDebugReloaded.instance.drawCollToggles[0] | !PDebugReloaded.instance.drawCollToggles[1] | !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
-
-                foreach (Collider collider in FindObjectsOfType<Collider>())
-                {
-                    if (!collider.enabled)
-                        continue;
-                    if (extraCheck)
-                    {
-                        if (!PDebugReloaded.instance.drawCollToggles[0] && collider is MeshCollider)
-                            continue;
-                        else if (!PDebugReloaded.instance.drawCollToggles[1] &&
-                            (!(collider is BoxCollider) && !(collider is SphereCollider) && !(collider is MeshCollider) && !(collider is CapsuleCollider)))
-                            continue;
-                        else if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
-                            continue;
-                        else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
-                            continue;
-                    }
-
-                    Bounds bounds = collider.bounds;
-                    Vector3 min = bounds.min;
-                    Vector3 max = bounds.max;
-
-                    // Bottom lines
-                    GL.Vertex(new Vector3(min.x, min.y, min.z));
-                    GL.Vertex(new Vector3(max.x, min.y, min.z));
-
-                    GL.Vertex(new Vector3(max.x, min.y, min.z));
-                    GL.Vertex(new Vector3(max.x, min.y, max.z));
-
-                    GL.Vertex(new Vector3(max.x, min.y, max.z));
-                    GL.Vertex(new Vector3(min.x, min.y, max.z));
-
-                    GL.Vertex(new Vector3(min.x, min.y, max.z));
-                    GL.Vertex(new Vector3(min.x, min.y, min.z));
-
-                    // Top lines
-                    GL.Vertex(new Vector3(min.x, max.y, min.z));
-                    GL.Vertex(new Vector3(max.x, max.y, min.z));
-
-                    GL.Vertex(new Vector3(max.x, max.y, min.z));
-                    GL.Vertex(new Vector3(max.x, max.y, max.z));
-
-                    GL.Vertex(new Vector3(max.x, max.y, max.z));
-                    GL.Vertex(new Vector3(min.x, max.y, max.z));
-
-                    GL.Vertex(new Vector3(min.x, max.y, max.z));
-                    GL.Vertex(new Vector3(min.x, max.y, min.z));
-
-                    // Side lines
-                    GL.Vertex(new Vector3(min.x, min.y, min.z));
-                    GL.Vertex(new Vector3(min.x, max.y, min.z));
-
-                    GL.Vertex(new Vector3(max.x, min.y, min.z));
-                    GL.Vertex(new Vector3(max.x, max.y, min.z));
-
-                    GL.Vertex(new Vector3(max.x, min.y, max.z));
-                    GL.Vertex(new Vector3(max.x, max.y, max.z));
-
-                    GL.Vertex(new Vector3(min.x, min.y, max.z));
-                    GL.Vertex(new Vector3(min.x, max.y, max.z));
-                }
-                GL.End();
-                GL.PopMatrix();
-            }else{/*Also AI Code*/
-                GL.PushMatrix();
-                material.SetPass(0);
-                GL.LoadOrtho();
-
-                GL.Begin(GL.LINES);
-
-                bool extraCheck = !PDebugReloaded.instance.drawCollToggles[2] | !PDebugReloaded.instance.drawCollToggles[3];
-                var colliders = FindObjectsOfType<Collider2D>();
-                foreach (var collider in colliders)
-                {
-                    if (!collider.enabled)
-                        continue;
-
-                    if(collider.isTrigger)
-                        GL.Color(Color.green);
-                    else
-                        GL.Color(Color.red);
-                  
-                    if (extraCheck){
-                        if (!PDebugReloaded.instance.drawCollToggles[2] && collider.isTrigger)
-                            continue;
-                        else if (!PDebugReloaded.instance.drawCollToggles[3] && !collider.isTrigger)
-                            continue;
-                    }
-                    if (collider is BoxCollider2D boxCollider)
-                    {
-                        DrawBoxCollider2D(boxCollider);
-                    }
-                    else if (collider is CircleCollider2D sphereCollider)
-                    {
-                        DrawSphereCollider2D(sphereCollider);
-                    }
-                    else if (collider is CapsuleCollider2D capsuleCollider)
-                    {
-                        DrawCapsuleCollider2D(capsuleCollider);
-                    }
-                    else if (collider is TilemapCollider2D tilemapCollider)
-                    {
-                        DrawTilemapCollider2D(tilemapCollider);
-                    }
-                    else if (collider is EdgeCollider2D edgeCollider)
-                    {
-                        DrawEdgeCollider2D(edgeCollider);
-                    }
-                }
-
-                GL.End();
-                GL.PopMatrix();
-            }
-        }
-
-        void DrawBoxCollider2D(BoxCollider2D collider)
+        void Update()
         {
-            var center = collider.bounds.center;
-            var size = collider.size;
-            var halfSize = size * 0.5f;
-            var min = center - (Vector3)halfSize;
-            var max = center + (Vector3)halfSize;
-
-            // Zeichne die Box Collider-Kanten
-            DrawRect(min, max);
-        }
-
-        void DrawSphereCollider2D(CircleCollider2D collider)
-        {
-            var center = collider.bounds.center;
-            var radius = collider.radius;
-
-            // Zeichne die Kanten des Sphere Colliders
-            DrawCircle(center, radius);
-        }
-
-        void DrawCapsuleCollider2D(CapsuleCollider2D collider)
-        {
-            var center = collider.bounds.center;
-            var size = collider.size;
-            var radius = collider.size.x * 0.5f;
-            var height = collider.size.y - collider.size.x;
-
-            // Zeichne die Kanten des Capsule Colliders
-            DrawCapsule(center, radius, height);
-        }
-
-        void DrawTilemapCollider2D(TilemapCollider2D collider)
-        {
-            var bounds = collider.bounds;
-
-            // Zeichne die Kanten des Tilemap Colliders
-            DrawRect(bounds.min, bounds.max);
-        }
-
-        void DrawEdgeCollider2D(EdgeCollider2D collider)
-        {
-            var points = collider.points;
-            var startPoint = collider.bounds.min;
-
-            // Zeichne die Kanten des Edge Colliders
-            for (int i = 0; i < points.Length - 1; i++)
+            for (int i = 0; i < runtimeLines.Count; i++)
             {
-                var point1 = startPoint + (Vector3)points[i];
-                var point2 = startPoint + (Vector3)points[i + 1];
-                GL.Vertex3(point1.x, point1.y, 0);
-                GL.Vertex3(point2.x, point2.y, 0);
+                if (runtimeLines[i] != null)
+                    Destroy(runtimeLines[i]);
             }
-        }
 
-        // Zeichne ein Rechteck (Box) mit den angegebenen Eckpunkten
-        void DrawRect(Vector2 min, Vector2 max)
-        {
-            GL.Vertex3(min.x, min.y, 0);
-            GL.Vertex3(max.x, min.y, 0);
+            runtimeLines.Clear();
+            if (!drawCollision) return;
 
-            GL.Vertex3(max.x, min.y, 0);
-            GL.Vertex3(max.x, max.y, 0);
-
-            GL.Vertex3(max.x, max.y, 0);
-            GL.Vertex3(min.x, max.y, 0);
-
-            GL.Vertex3(min.x, max.y, 0);
-            GL.Vertex3(min.x, min.y, 0);
-        }
-
-        // Zeichne einen Kreis (Sphere) mit dem angegebenen Mittelpunkt und Radius
-        void DrawCircle(Vector2 center, float radius)
-        {
-            const int segments = 32;
-            float anglePerSegment = (Mathf.PI * 2f) / segments;
-
-            for (int i = 0; i < segments; i++)
+            Collider2D[] colliders2D = FindObjectsOfType<Collider2D>();
+            foreach (var col in colliders2D)
             {
-                var angle = i * anglePerSegment;
-                var startPoint = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
-                var endPoint = center + new Vector2(Mathf.Cos(angle + anglePerSegment), Mathf.Sin(angle + anglePerSegment)) * radius;
+                if (!PDebugReloaded.instance.drawCollToggles[0] && col is MeshCollider) continue; else if (!PDebugReloaded.instance.drawCollToggles[1] && (!(col is BoxCollider) && !(col is SphereCollider) && !(col is MeshCollider) && !(col is CapsuleCollider))) continue; else if (!PDebugReloaded.instance.drawCollToggles[2] && col.isTrigger) continue; else if (!PDebugReloaded.instance.drawCollToggles[3] && !col.isTrigger) continue;
+                if (!col || !col.enabled) continue;
 
-                GL.Vertex3(startPoint.x, startPoint.y, 0);
-                GL.Vertex3(endPoint.x, endPoint.y, 0);
+                Color color = col.isTrigger ? triggerColor : collisionColor;
+                DrawCollider2D(col, color);
+            }
+
+            Collider[] colliders3D = FindObjectsOfType<Collider>();
+            foreach (var col in colliders3D)
+            {
+                if (!PDebugReloaded.instance.drawCollToggles[0] && col is MeshCollider) continue; else if (!PDebugReloaded.instance.drawCollToggles[1] && (!(col is BoxCollider) && !(col is SphereCollider) && !(col is MeshCollider) && !(col is CapsuleCollider))) continue; else if (!PDebugReloaded.instance.drawCollToggles[2] && col.isTrigger) continue; else if (!PDebugReloaded.instance.drawCollToggles[3] && !col.isTrigger) continue;
+                if (!col || !col.enabled) continue;
+
+                Color color = col.isTrigger ? triggerColor : collisionColor;
+                DrawCollider3D(col, color);
             }
         }
 
-        // Zeichne eine Kapsel (Capsule) mit dem angegebenen Mittelpunkt, Radius und Höhe
-        void DrawCapsule(Vector2 center, float radius, float height)
-        {
-            var halfHeight = height * 0.5f;
-            var top = center + Vector2.up * halfHeight;
-            var bottom = center + Vector2.down * halfHeight;
+        // =========================
+        // LINE CREATION
+        // =========================
 
-            // Zeichne die Kanten der Kapsel
-            DrawCircle(top, radius);
-            DrawCircle(bottom, radius);
-            DrawRect(top - new Vector2(radius, 0), bottom + new Vector2(radius, 0));
+        LineRenderer CreateLine(Color color)
+        {
+            GameObject go = new GameObject("ColliderLine");
+            go.transform.SetParent(transform);
+
+            runtimeLines.Add(go);
+
+            var lr = go.AddComponent<LineRenderer>();
+            lr.material = lineMat;
+            lr.useWorldSpace = true;
+            lr.widthMultiplier = lineWidth;
+            lr.startColor = color;
+            lr.endColor = color;
+            lr.positionCount = 0;
+            lr.loop = false;
+            lr.sortingOrder = 999;
+
+            return lr;
         }
 
+        // =========================
+        // 2D
+        // =========================
+
+        void DrawCollider2D(Collider2D col, Color color)
+        {
+            if (col is BoxCollider2D box) DrawBox(box, color);
+            else if (col is CircleCollider2D circle) DrawCircle(circle, color);
+            else if (col is CapsuleCollider2D cap) DrawCapsule(cap, color);
+            else if (col is PolygonCollider2D poly) DrawPolygon(poly, color);
+            else if (col is EdgeCollider2D edge) DrawEdge(edge, color);
+            else if (col is CompositeCollider2D comp) DrawComposite(comp, color);
+        }
+
+        void DrawBox(BoxCollider2D box, Color color)
+        {
+            var lr = CreateLine(color);
+
+            Vector2 size = box.size;
+            Vector2 offset = box.offset;
+            Transform t = box.transform;
+
+            Vector3[] p = new Vector3[5];
+
+            p[0] = t.TransformPoint(offset + new Vector2(-size.x, -size.y) * 0.5f);
+            p[1] = t.TransformPoint(offset + new Vector2(size.x, -size.y) * 0.5f);
+            p[2] = t.TransformPoint(offset + new Vector2(size.x, size.y) * 0.5f);
+            p[3] = t.TransformPoint(offset + new Vector2(-size.x, size.y) * 0.5f);
+            p[4] = p[0];
+
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
+
+        void DrawCircle(CircleCollider2D circle, Color color)
+        {
+            var lr = CreateLine(color);
+
+            int segments = 32;
+            Vector3[] p = new Vector3[segments + 1];
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = Mathf.Deg2Rad * (i * 360f / segments);
+                Vector2 local = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * circle.radius + circle.offset;
+                p[i] = circle.transform.TransformPoint(local);
+            }
+
+            lr.loop = true;
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
+
+        void DrawCapsule(CapsuleCollider2D cap, Color color)
+        {
+            var lr = CreateLine(color);
+
+            int segments = 16;
+            List<Vector3> points = new List<Vector3>();
+
+            bool vertical = cap.direction == CapsuleDirection2D.Vertical;
+            float radius = vertical ? cap.size.x / 2f : cap.size.y / 2f;
+            float height = (vertical ? cap.size.y : cap.size.x) - 2f * radius;
+
+            Transform t = cap.transform;
+            Vector2 offset = cap.offset;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = Mathf.PI * i / segments;
+                float x = Mathf.Cos(a) * radius;
+                float y = Mathf.Sin(a) * radius;
+
+                Vector2 p = vertical
+                    ? new Vector2(x, y + height / 2f)
+                    : new Vector2(y + height / 2f, x);
+
+                points.Add(t.TransformPoint(offset + p));
+            }
+
+            for (int i = segments; i >= 0; i--)
+            {
+                float a = Mathf.PI * i / segments;
+                float x = -Mathf.Cos(a) * radius;
+                float y = Mathf.Sin(a) * radius;
+
+                Vector2 p = vertical
+                    ? new Vector2(x, -y - height / 2f)
+                    : new Vector2(-y - height / 2f, x);
+
+                points.Add(t.TransformPoint(offset + p));
+            }
+
+            lr.loop = true;
+            lr.positionCount = points.Count;
+            lr.SetPositions(points.ToArray());
+        }
+
+        void DrawPolygon(PolygonCollider2D poly, Color color)
+        {
+            var lr = CreateLine(color);
+
+            var path = poly.GetPath(0);
+            Vector3[] p = new Vector3[path.Length + 1];
+
+            for (int i = 0; i < path.Length; i++)
+                p[i] = poly.transform.TransformPoint(path[i]);
+
+            p[p.Length - 1] = p[0];
+
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
+
+        void DrawEdge(EdgeCollider2D edge, Color color)
+        {
+            var lr = CreateLine(color);
+
+            var pts = edge.points;
+            Vector3[] p = new Vector3[pts.Length];
+
+            for (int i = 0; i < pts.Length; i++)
+                p[i] = edge.transform.TransformPoint(pts[i]);
+
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
+
+        void DrawComposite(CompositeCollider2D comp, Color color)
+        {
+            var lr = CreateLine(color);
+
+            int count = comp.GetPathPointCount(0);
+            Vector2[] pts = new Vector2[count];
+
+            comp.GetPath(0, pts);
+
+            Vector3[] p = new Vector3[count + 1];
+
+            for (int i = 0; i < count; i++)
+                p[i] = comp.transform.TransformPoint(pts[i]);
+
+            p[p.Length - 1] = p[0];
+
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
+
+        // =========================
+        // 3D
+        // =========================
+
+        void DrawCollider3D(Collider col, Color color)
+        {
+            if (col is BoxCollider box) DrawBox3D(box, color);
+            else if (col is SphereCollider sphere) DrawSphere3D(sphere, color);
+            else if (col is CapsuleCollider cap) DrawCapsule3D(cap, color);
+            else if (col is MeshCollider mesh) DrawMesh3D(mesh, color);
+        }
+
+        void DrawBox3D(BoxCollider box, Color color)
+        {
+            var lr = CreateLine(color);
+
+            Transform t = box.transform;
+            Vector3 c = box.center;
+            Vector3 s = box.size * 0.5f;
+
+            Vector3[] p = new Vector3[8];
+
+            p[0] = t.TransformPoint(c + new Vector3(-s.x, -s.y, -s.z));
+            p[1] = t.TransformPoint(c + new Vector3(s.x, -s.y, -s.z));
+            p[2] = t.TransformPoint(c + new Vector3(s.x, -s.y, s.z));
+            p[3] = t.TransformPoint(c + new Vector3(-s.x, -s.y, s.z));
+
+            p[4] = t.TransformPoint(c + new Vector3(-s.x, s.y, -s.z));
+            p[5] = t.TransformPoint(c + new Vector3(s.x, s.y, -s.z));
+            p[6] = t.TransformPoint(c + new Vector3(s.x, s.y, s.z));
+            p[7] = t.TransformPoint(c + new Vector3(-s.x, s.y, s.z));
+
+            Vector3[] lines =
+            {
+            p[0],p[1], p[1],p[2], p[2],p[3], p[3],p[0],
+            p[4],p[5], p[5],p[6], p[6],p[7], p[7],p[4],
+            p[0],p[4], p[1],p[5], p[2],p[6], p[3],p[7]
+        };
+
+            lr.positionCount = lines.Length;
+            lr.SetPositions(lines);
+        }
+
+        void DrawSphere3D(SphereCollider sphere, Color color)
+        {
+            var lr = CreateLine(color);
+
+            int seg = 16;
+            List<Vector3> p = new List<Vector3>();
+
+            Vector3 c = sphere.transform.TransformPoint(sphere.center);
+            float r = sphere.radius;
+
+            for (int i = 0; i < seg; i++)
+            {
+                float a = Mathf.Deg2Rad * (i * 360f / seg);
+                p.Add(c + new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0));
+            }
+
+            lr.positionCount = p.Count;
+            lr.SetPositions(p.ToArray());
+        }
+
+        void DrawCapsule3D(CapsuleCollider cap, Color color)
+        {
+            var lr = CreateLine(color);
+
+            int segments = 16;
+            List<Vector3> points = new List<Vector3>();
+
+            Transform t = cap.transform;
+
+            float radius = cap.radius;
+            float height = Mathf.Max(cap.height, radius * 2f);
+            float cylinderHeight = height - 2f * radius;
+
+            Vector3 center = cap.center;
+
+            Vector3 up = Vector3.up;
+            Vector3 right = Vector3.right;
+            Vector3 forward = Vector3.forward;
+
+            if (cap.direction == 0)
+            {
+                up = Vector3.right;
+            }
+            else if (cap.direction == 2)
+            {
+                up = Vector3.forward;
+            }
+
+            Vector3 topCenter = center + up * (cylinderHeight / 2f);
+            Vector3 bottomCenter = center - up * (cylinderHeight / 2f);
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = Mathf.Deg2Rad * (i * 360f / segments);
+                Vector3 circle = right * Mathf.Cos(a) * radius + forward * Mathf.Sin(a) * radius;
+
+                points.Add(t.TransformPoint(topCenter + circle));
+                points.Add(t.TransformPoint(bottomCenter + circle));
+            }
+
+            lr.positionCount = points.Count;
+            lr.SetPositions(points.ToArray());
+        }
+
+        void DrawMesh3D(MeshCollider mesh, Color color)
+        {
+            var lr = CreateLine(color);
+
+            Bounds b = mesh.bounds;
+
+            Vector3[] p =
+            {
+            b.min,
+            new Vector3(b.max.x,b.min.y,b.min.z),
+            new Vector3(b.max.x,b.min.y,b.max.z),
+            new Vector3(b.min.x,b.min.y,b.max.z),
+            b.min
+        };
+
+            lr.positionCount = p.Length;
+            lr.SetPositions(p);
+        }
     }
-
 }
